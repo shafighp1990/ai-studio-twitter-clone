@@ -1,0 +1,1 @@
+-- Portfolio demo data is created through Supabase Auth and the application UI.

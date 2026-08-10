@@ -1,36 +1,92 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Studio — Twitter Clone
 
-## Getting Started
+A portfolio-grade social network inspired by the interaction model and responsive layout of X/Twitter. The application is built with Next.js, TypeScript, Tailwind CSS, and Supabase.
 
-First, run the development server:
+## Features
+
+- Responsive three-column desktop layout and mobile bottom navigation
+- Secure email/password authentication with Supabase Auth and SSR cookies
+- Public home timeline with 280-character posts
+- Image uploads through Supabase Storage
+- Post detail pages and threaded replies
+- Optimistic likes, reposts, bookmarks, and follows
+- Public profiles with avatar, banner, bio, location, and website editing
+- Followers and following lists
+- Explore search across people and posts
+- Private bookmarks and account notifications
+- Database-generated notifications for likes, reposts, replies, and follows
+- Dark X/Twitter-inspired UI with the custom AI Studio identity
+
+## Stack
+
+- Next.js 16 App Router
+- React 19 and TypeScript
+- Tailwind CSS 4
+- Supabase Auth, Postgres, Storage, and Row Level Security
+- Cloudflare Workers with the OpenNext adapter
+- ESLint and npm security auditing
+
+## Local setup
+
+1. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+2. Copy `.env.example` to `.env.local` and add the project values from the Supabase Connect dialog:
+
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key
+   ```
+
+3. Apply the SQL files in `supabase/migrations` to a Supabase project.
+
+4. Start the application:
+
+   ```bash
+   npm run dev
+   ```
+
+5. Open [http://localhost:3000](http://localhost:3000).
+
+## Cloudflare deployment
+
+The repository includes the production configuration for Cloudflare Workers:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run build:cloudflare
+npm run preview
+npm run deploy
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+For Cloudflare Workers Builds, use `npm run build:cloudflare` as the build command and `npx wrangler deploy --keep-vars` as the deploy command. Configure both Supabase values as build secrets and runtime secrets:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Quality checks
 
-## Learn More
+```bash
+npm run lint
+npm run build
+npm audit
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Security
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+All exposed tables have Row Level Security enabled. Public timelines can only read public social data. Creating or modifying posts, likes, reposts, follows, bookmarks, notifications, and media requires an authenticated user, with ownership verified in the database policies. The browser receives only the Supabase publishable key; no service-role key is used by the application.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Main routes
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `/` — home timeline
+- `/explore` — people and post search
+- `/notifications` — account activity
+- `/bookmarks` — private saved posts
+- `/messages` — inbox entry page
+- `/post/[id]` — post detail and replies
+- `/[username]` — public profile
+- `/login` and `/register` — authentication
