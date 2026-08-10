@@ -19,9 +19,12 @@ const POST_SELECT = `
   created_at,
   author:profiles!posts_author_id_fkey(${PROFILE_COLUMNS}),
   post_likes(user_id),
-  reposts(user_id),
-  bookmarks(user_id)
+  reposts(user_id)
 `;
+
+function postSelect(includeViewerBookmarks: boolean) {
+  return `${POST_SELECT}${includeViewerBookmarks ? ", bookmarks(user_id)" : ""}`;
+}
 
 type RawPost = {
   id: string;
@@ -96,6 +99,10 @@ export async function getPosts(options?: {
   let postIds: string[] | null = null;
 
   if (options?.bookmarkedBy) {
+    if (!viewerId || options.bookmarkedBy !== viewerId) {
+      return [];
+    }
+
     const { data: bookmarkRows } = await supabase
       .from("bookmarks")
       .select("post_id")
@@ -110,7 +117,7 @@ export async function getPosts(options?: {
 
   let query = supabase
     .from("posts")
-    .select(POST_SELECT)
+    .select(postSelect(Boolean(viewerId)))
     .order("created_at", { ascending: false })
     .limit(options?.limit ?? 50);
 
@@ -171,7 +178,7 @@ export async function getPostById(postId: string) {
   const viewerId = claimsData?.claims?.sub;
   const { data, error } = await supabase
     .from("posts")
-    .select(POST_SELECT)
+    .select(postSelect(Boolean(viewerId)))
     .eq("id", postId)
     .maybeSingle();
 

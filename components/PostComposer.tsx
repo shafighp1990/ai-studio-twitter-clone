@@ -2,15 +2,16 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/components/I18nProvider";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/types";
 import Avatar from "./Avatar";
-import { CalendarIcon, CloseIcon, ImageIcon, SmileIcon } from "./icons";
+import { CloseIcon, ImageIcon } from "./icons";
 
 export default function PostComposer({
   viewer,
   replyToId,
-  placeholder = "What is happening?!",
+  placeholder,
   compact = false,
 }: {
   viewer: Profile;
@@ -18,6 +19,7 @@ export default function PostComposer({
   placeholder?: string;
   compact?: boolean;
 }) {
+  const { intlLocale, t } = useI18n();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [content, setContent] = useState("");
@@ -34,12 +36,12 @@ export default function PostComposer({
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setError("Please choose an image file.");
+      setError(t("imageFileOnly"));
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      setError("The image must be smaller than 5 MB.");
+      setError(t("imageTooLarge"));
       return;
     }
 
@@ -64,6 +66,7 @@ export default function PostComposer({
     startTransition(async () => {
       const supabase = createClient();
       let imageUrl: string | null = null;
+      let uploadedPath: string | null = null;
 
       if (image) {
         const extension = image.name.split(".").pop()?.toLowerCase() || "jpg";
@@ -73,10 +76,11 @@ export default function PostComposer({
           .upload(filePath, image, { cacheControl: "3600", upsert: false });
 
         if (uploadError) {
-          setError(uploadError.message);
+          setError(t("requestFailed"));
           return;
         }
 
+        uploadedPath = filePath;
         imageUrl = supabase.storage.from("social-media").getPublicUrl(filePath)
           .data.publicUrl;
       }
@@ -89,7 +93,10 @@ export default function PostComposer({
       });
 
       if (postError) {
-        setError(postError.message);
+        if (uploadedPath) {
+          await supabase.storage.from("social-media").remove([uploadedPath]);
+        }
+        setError(t("requestFailed"));
         return;
       }
 
@@ -100,33 +107,43 @@ export default function PostComposer({
   }
 
   return (
-    <form id={replyToId ? undefined : "composer"} onSubmit={handleSubmit} className={`flex gap-3 ${compact ? "p-4" : "px-4 py-3"}`}>
+    <form
+      id={replyToId ? undefined : "composer"}
+      onSubmit={handleSubmit}
+      className={`flex gap-3 ${compact ? "p-4" : "px-4 py-3"}`}
+    >
       <Avatar profile={viewer} size={40} />
       <div className="min-w-0 flex-1">
         <textarea
           value={content}
           onChange={(event) => setContent(event.target.value)}
-          placeholder={placeholder}
+          placeholder={placeholder ?? (replyToId ? t("replyPlaceholder") : t("composerPlaceholder"))}
           rows={compact ? 2 : 3}
-          maxLength={320}
-          className="w-full resize-none bg-transparent pt-2 text-xl leading-6 text-[#e7e9ea] outline-none placeholder:text-[#71767b]"
-          aria-label={replyToId ? "Post your reply" : "Post text"}
+          maxLength={280}
+          dir="auto"
+          className="w-full resize-none bg-transparent pt-2 text-start text-xl leading-6 text-[#e7ebed] outline-none placeholder:text-[#8a959c]"
+          aria-label={replyToId ? t("replyPlaceholder") : t("postText")}
         />
 
         {preview && (
-          <div className="relative mt-2 overflow-hidden rounded-2xl border border-[#2f3336]">
+          <div className="relative mt-2 overflow-hidden border border-[#293036]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={preview} alt="Selected upload preview" className="max-h-[420px] w-full object-cover" />
-            <button type="button" onClick={removeImage} className="absolute right-2 top-2 rounded-full bg-black/70 p-2 text-white hover:bg-black/90" aria-label="Remove image">
+            <img src={preview} alt={t("selectedImageAlt")} className="max-h-[420px] w-full object-cover" />
+            <button
+              type="button"
+              onClick={removeImage}
+              className="absolute end-2 top-2 bg-[#0b0d0e]/85 p-2 text-white hover:bg-[#0b0d0e]"
+              aria-label={t("removeImage")}
+            >
               <CloseIcon size={20} />
             </button>
           </div>
         )}
 
-        {error && <p className="mt-2 text-sm text-[#f4212e]">{error}</p>}
+        {error && <p role="alert" className="mt-2 text-sm text-[#f25f68]">{error}</p>}
 
-        <div className="mt-2 flex items-center justify-between border-t border-[#2f3336] pt-2">
-          <div className="flex items-center text-[#1d9bf0]">
+        <div className="mt-2 flex items-center justify-between border-t border-[#293036] pt-2">
+          <div className="flex items-center text-[#72a7c7]">
             <input
               ref={fileInputRef}
               type="file"
@@ -134,25 +151,34 @@ export default function PostComposer({
               className="hidden"
               onChange={(event) => handleImage(event.target.files?.[0])}
             />
-            <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-full p-2 transition hover:bg-[#1d9bf0]/10" aria-label="Add image">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 transition hover:bg-[#72a7c7]/10"
+              aria-label={t("addImage")}
+            >
               <ImageIcon size={20} />
-            </button>
-            <button type="button" className="rounded-full p-2 opacity-50" aria-label="Add emoji" title="Emoji picker coming soon">
-              <SmileIcon size={20} />
-            </button>
-            <button type="button" className="hidden rounded-full p-2 opacity-50 sm:block" aria-label="Schedule post" title="Scheduling coming soon">
-              <CalendarIcon size={20} />
             </button>
           </div>
 
           <div className="flex items-center gap-3">
             {content.length > 0 && (
-              <span className={`text-sm ${remaining < 0 ? "text-[#f4212e]" : remaining < 20 ? "text-[#ffd400]" : "text-[#71767b]"}`}>
-                {remaining}
+              <span className={`text-sm ${remaining < 0 ? "text-[#f25f68]" : remaining < 20 ? "text-[#d6a84a]" : "text-[#8a959c]"}`}>
+                {new Intl.NumberFormat(intlLocale).format(remaining)}
               </span>
             )}
-            <button type="submit" disabled={!canPost} className="rounded-full bg-[#1d9bf0] px-4 py-2 text-[15px] font-bold text-white transition hover:bg-[#1a8cd8] disabled:cursor-not-allowed disabled:opacity-50">
-              {isPending ? "Posting…" : replyToId ? "Reply" : "Post"}
+            <button
+              type="submit"
+              disabled={!canPost}
+              className="bg-[#72a7c7] px-4 py-2 text-[15px] font-bold text-[#0b0d0e] transition hover:bg-[#86b8d4] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isPending
+                ? replyToId
+                  ? t("replying")
+                  : t("posting")
+                : replyToId
+                  ? t("reply")
+                  : t("navPost")}
             </button>
           </div>
         </div>

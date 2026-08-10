@@ -1,11 +1,18 @@
 import Link from "next/link";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { getServerI18n } from "@/lib/i18n/server";
 
-export default function NotFound() {
+export default async function NotFound() {
+  const { t } = await getServerI18n();
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-black px-6 text-center text-[#e7e9ea]">
+    <main className="relative flex min-h-screen items-center justify-center bg-[var(--background)] px-6 text-center text-[var(--foreground)]">
+      <div className="absolute end-6 top-6">
+        <LanguageSwitcher />
+      </div>
       <div>
-        <p className="text-[15px] text-[#71767b]">Hmm…this page doesn&apos;t exist. Try searching for something else.</p>
-        <Link href="/explore" className="mt-5 inline-block rounded-full bg-[#1d9bf0] px-5 py-2.5 text-[15px] font-bold text-white">Search</Link>
+        <p className="text-[15px] text-[var(--muted)]">{t("notFoundText")}</p>
+        <Link href="/explore" className="mt-5 inline-block rounded-sm bg-[var(--blue)] px-5 py-2.5 text-[15px] font-semibold text-[#071015]">{t("notFoundAction")}</Link>
       </div>
     </main>
   );

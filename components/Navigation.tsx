@@ -5,29 +5,29 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/types";
 import Avatar from "./Avatar";
+import LanguageSwitcher from "./LanguageSwitcher";
+import { useI18n } from "./I18nProvider";
 import {
   AIStudioLogo,
   BellIcon,
   BookmarkIcon,
   ComposeIcon,
   HomeIcon,
-  MailIcon,
-  MoreIcon,
   SearchIcon,
   UserIcon,
 } from "./icons";
 
 const navigation = [
-  { href: "/", label: "Home", icon: HomeIcon },
-  { href: "/explore", label: "Explore", icon: SearchIcon },
-  { href: "/notifications", label: "Notifications", icon: BellIcon },
-  { href: "/messages", label: "Messages", icon: MailIcon },
-  { href: "/bookmarks", label: "Bookmarks", icon: BookmarkIcon },
-];
+  { href: "/", labelKey: "navHome", icon: HomeIcon },
+  { href: "/explore", labelKey: "navExplore", icon: SearchIcon },
+  { href: "/notifications", labelKey: "navNotifications", icon: BellIcon },
+  { href: "/bookmarks", labelKey: "navBookmarks", icon: BookmarkIcon },
+] as const;
 
 export default function Navigation({ viewer }: { viewer: Profile | null }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { t } = useI18n();
 
   async function handleLogout() {
     const supabase = createClient();
@@ -44,13 +44,13 @@ export default function Navigation({ viewer }: { viewer: Profile | null }) {
         <div>
           <Link
             href="/"
-            className="mb-1 flex h-[52px] w-[52px] items-center justify-center rounded-full text-[#1d9bf0] transition hover:bg-[#1d9bf0]/10 xl:ml-2"
-            aria-label="AI Studio home"
+            className="mb-1 flex h-[52px] w-[52px] items-center justify-center rounded-lg text-[#72a7c7] transition hover:bg-[#72a7c7]/10 xl:ms-2"
+            aria-label={t("brandHome")}
           >
-            <AIStudioLogo size={39} />
+            <AIStudioLogo size={38} />
           </Link>
 
-          <nav aria-label="Primary navigation">
+          <nav aria-label={t("primaryNavigation")}>
             {navigation.map((item) => {
               const Icon = item.icon;
               const active =
@@ -60,11 +60,13 @@ export default function Navigation({ viewer }: { viewer: Profile | null }) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="group flex w-fit items-center gap-5 rounded-full px-3 py-3 text-xl transition hover:bg-[#eff3f4]/10"
+                  aria-label={t(item.labelKey)}
+                  aria-current={active ? "page" : undefined}
+                  className="group flex w-fit items-center gap-5 rounded-lg px-3 py-3 text-xl transition hover:bg-white/[0.06]"
                 >
                   <Icon size={27} strokeWidth={active ? 2.6 : 2} />
                   <span className={`hidden xl:inline ${active ? "font-bold" : "font-normal"}`}>
-                    {item.label}
+                    {t(item.labelKey)}
                   </span>
                 </Link>
               );
@@ -72,59 +74,100 @@ export default function Navigation({ viewer }: { viewer: Profile | null }) {
 
             <Link
               href={profileHref}
-              className="flex w-fit items-center gap-5 rounded-full px-3 py-3 text-xl transition hover:bg-[#eff3f4]/10"
+              aria-label={t("navProfile")}
+              aria-current={pathname === profileHref ? "page" : undefined}
+              className="flex w-fit items-center gap-5 rounded-lg px-3 py-3 text-xl transition hover:bg-white/[0.06]"
             >
               <UserIcon size={27} strokeWidth={pathname === profileHref ? 2.6 : 2} />
-              <span className="hidden xl:inline">Profile</span>
+              <span className={`hidden xl:inline ${pathname === profileHref ? "font-bold" : ""}`}>
+                {t("navProfile")}
+              </span>
             </Link>
           </nav>
 
           <Link
             href={viewer ? "/#composer" : "/login"}
-            className="mt-4 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#1d9bf0] font-bold text-white transition hover:bg-[#1a8cd8] xl:w-[225px]"
+            aria-label={t("navPost")}
+            className="mt-4 flex h-[52px] w-[52px] items-center justify-center rounded-lg bg-[#72a7c7] font-bold text-[#0b0d0e] transition hover:bg-[#86b8d4] xl:w-[225px]"
           >
             <ComposeIcon size={24} className="xl:hidden" />
-            <span className="hidden text-[17px] xl:inline">Post</span>
+            <span className="hidden text-[17px] xl:inline">{t("navPost")}</span>
           </Link>
         </div>
 
-        <div className="pb-3">
+        <div className="space-y-2 pb-3">
+          <div className="hidden px-2 xl:block">
+            <LanguageSwitcher compact />
+          </div>
+
           {viewer ? (
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex w-full items-center gap-3 rounded-full p-2 text-left transition hover:bg-[#eff3f4]/10"
-            >
-              <Avatar profile={viewer} size={40} link={false} />
-              <span className="hidden min-w-0 flex-1 xl:block">
-                <span className="block truncate text-[15px] font-bold">{viewer.name}</span>
-                <span className="block truncate text-[15px] text-[#71767b]">@{viewer.username}</span>
-              </span>
-              <MoreIcon size={19} className="hidden xl:block" />
-            </button>
+            <>
+              <Link
+                href={profileHref}
+                className="flex w-full items-center gap-3 rounded-lg p-2 text-start transition hover:bg-white/[0.06]"
+              >
+                <Avatar profile={viewer} size={40} link={false} />
+                <span className="hidden min-w-0 flex-1 xl:block">
+                  <span dir="auto" className="block truncate text-[15px] font-bold">
+                    {viewer.name}
+                  </span>
+                  <span dir="ltr" className="block truncate text-[15px] text-[#8a959c]">
+                    @{viewer.username}
+                  </span>
+                </span>
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                aria-label={t("signOut")}
+                className="flex h-10 w-full items-center justify-center rounded-lg border border-[#3a4045] px-3 text-sm font-semibold text-[#d9e0e4] transition hover:border-[#71808a] hover:bg-white/[0.04] xl:w-[225px]"
+              >
+                <span className="hidden xl:inline">{t("signOut")}</span>
+                <span aria-hidden="true" className="text-lg xl:hidden">
+                  ↪
+                </span>
+              </button>
+            </>
           ) : (
             <Link
               href="/login"
-              className="flex h-[48px] items-center justify-center rounded-full border border-[#536471] font-bold transition hover:bg-white/10 xl:w-[225px]"
+              aria-label={t("signIn")}
+              className="flex h-[48px] items-center justify-center rounded-lg border border-[#536471] font-bold transition hover:bg-white/[0.06] xl:w-[225px]"
             >
               <UserIcon className="xl:hidden" />
-              <span className="hidden xl:inline">Sign in</span>
+              <span className="hidden xl:inline">{t("signIn")}</span>
             </Link>
           )}
         </div>
       </aside>
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 flex h-[56px] items-center justify-around border-t border-[#2f3336] bg-black/95 px-2 backdrop-blur sm:hidden" aria-label="Mobile navigation">
-        {navigation.slice(0, 4).map((item) => {
+      <nav
+        className="fixed inset-x-0 bottom-0 z-50 flex h-[56px] items-center justify-around border-t border-[#293036] bg-[#0b0d0e]/95 px-2 sm:hidden"
+        aria-label={t("mobileNavigation")}
+      >
+        {navigation.map((item) => {
           const Icon = item.icon;
+          const active =
+            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
-            <Link key={item.href} href={item.href} className="rounded-full p-2.5" aria-label={item.label}>
-              <Icon size={25} />
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-label={t(item.labelKey)}
+              aria-current={active ? "page" : undefined}
+              className="rounded-lg p-2.5"
+            >
+              <Icon size={25} strokeWidth={active ? 2.6 : 2} />
             </Link>
           );
         })}
-        <Link href={profileHref} className="rounded-full p-2.5" aria-label="Profile">
-          <UserIcon size={25} />
+        <Link
+          href={profileHref}
+          className="rounded-lg p-2.5"
+          aria-label={t("navProfile")}
+          aria-current={pathname === profileHref ? "page" : undefined}
+        >
+          <UserIcon size={25} strokeWidth={pathname === profileHref ? 2.6 : 2} />
         </Link>
       </nav>
     </>

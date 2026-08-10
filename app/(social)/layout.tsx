@@ -11,9 +11,9 @@ export default async function SocialLayout({ children }: { children: React.React
   ]);
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-[1265px] justify-center bg-black">
+    <div className="mx-auto flex min-h-screen w-full max-w-[1265px] justify-center bg-[#0b0d0e]">
       <Navigation viewer={viewer} />
-      <main className="min-h-screen w-full max-w-[600px] border-x border-[#2f3336] pb-14 sm:pb-0">
+      <main className="min-h-screen w-full max-w-[600px] border-x border-[#293036] pb-14 sm:pb-0">
         {children}
       </main>
       <RightRail viewer={viewer} suggestions={suggestions} />

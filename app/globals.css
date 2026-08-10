@@ -1,18 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  --background: #000000;
-  --foreground: #e7e9ea;
-  --muted: #71767b;
-  --border: #2f3336;
-  --blue: #1d9bf0;
-  --blue-hover: #1a8cd8;
+  --background: #0b0d0e;
+  --surface: #15191c;
+  --foreground: #e7ebed;
+  --muted: #8a959c;
+  --border: #293036;
+  --blue: #72a7c7;
+  --blue-hover: #86b8d4;
+  --font-ui: var(--font-fira-sans);
+}
+
+html:lang(fa),
+html:lang(ar) {
+  --font-ui: var(--font-noto-arabic);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: Arial, Helvetica, sans-serif;
+  --font-sans: var(--font-ui), sans-serif;
 }
 
 * {
@@ -20,14 +27,16 @@
 }
 
 html {
-  background: #000000;
+  background: var(--background);
 }
 
 body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-ui), sans-serif;
+  font-feature-settings: "kern" 1, "liga" 1;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -50,8 +59,8 @@ textarea:focus-visible {
 }
 
 ::selection {
-  background: #1d9bf0;
-  color: #ffffff;
+  background: #72a7c7;
+  color: #071015;
 }
 
 ::-webkit-scrollbar {
@@ -59,13 +68,24 @@ textarea:focus-visible {
 }
 
 ::-webkit-scrollbar-track {
-  background: #000000;
+  background: var(--background);
 }
 
 ::-webkit-scrollbar-thumb {
-  border: 3px solid #000000;
-  border-radius: 999px;
-  background: #2f3336;
+  border: 3px solid var(--background);
+  border-radius: 2px;
+  background: var(--border);
+}
+
+[dir="rtl"] input[type="email"],
+[dir="rtl"] input[name="username"],
+[dir="rtl"] code {
+  direction: ltr;
+  text-align: left;
+}
+
+[dir="rtl"] .rtl-flip {
+  transform: scaleX(-1);
 }
 
 .hide-scrollbar {

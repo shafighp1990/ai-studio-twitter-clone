@@ -36,7 +36,7 @@ export function AIStudioLogo({ size = 38, ...props }: IconProps) {
       width={size}
       height={size}
       fill="none"
-      aria-label="AI Studio"
+      aria-hidden="true"
       {...props}
     >
       <rect width="44" height="44" rx="12" fill="currentColor" />

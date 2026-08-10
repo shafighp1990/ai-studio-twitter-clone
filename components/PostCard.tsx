@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { useI18n } from "@/components/I18nProvider";
 import { createClient } from "@/lib/supabase/client";
 import type { FeedPost, Profile } from "@/lib/types";
 import Avatar from "./Avatar";
@@ -12,19 +13,43 @@ import {
   HeartIcon,
   MoreIcon,
   ReplyIcon,
-  RepostIcon,
   ShareIcon,
 } from "./icons";
 
-function formatTime(value: string) {
+function formatTime(value: string, intlLocale: string) {
   const date = new Date(value);
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  const difference = date.getTime() - Date.now();
+  const seconds = Math.round(difference / 1000);
+  const absoluteSeconds = Math.abs(seconds);
+  const relative = new Intl.RelativeTimeFormat(intlLocale, {
+    numeric: "auto",
+    style: "narrow",
+  });
 
-  if (seconds < 60) return `${Math.max(seconds, 1)}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d`;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  if (absoluteSeconds < 60) return relative.format(seconds, "second");
+  if (absoluteSeconds < 3600) return relative.format(Math.round(difference / 60_000), "minute");
+  if (absoluteSeconds < 86_400) return relative.format(Math.round(difference / 3_600_000), "hour");
+  if (absoluteSeconds < 604_800) return relative.format(Math.round(difference / 86_400_000), "day");
+
+  return new Intl.DateTimeFormat(intlLocale, {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  }).format(date);
+}
+
+function storagePathFromPublicUrl(url: string | null) {
+  if (!url) return null;
+  try {
+    const marker = "/storage/v1/object/public/social-media/";
+    const pathname = new URL(url).pathname;
+    const markerIndex = pathname.indexOf(marker);
+    return markerIndex >= 0
+      ? decodeURIComponent(pathname.slice(markerIndex + marker.length))
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export default function PostCard({
@@ -36,14 +61,15 @@ export default function PostCard({
   viewer: Profile | null;
   detail?: boolean;
 }) {
+  const { intlLocale, t } = useI18n();
   const router = useRouter();
   const [liked, setLiked] = useState(post.likedByViewer);
-  const [reposted, setReposted] = useState(post.repostedByViewer);
   const [bookmarked, setBookmarked] = useState(post.bookmarkedByViewer);
   const [likeCount, setLikeCount] = useState(post.likeCount);
-  const [repostCount, setRepostCount] = useState(post.repostCount);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const numberFormatter = new Intl.NumberFormat(intlLocale);
 
   function requireViewer() {
     if (!viewer) {
@@ -54,7 +80,7 @@ export default function PostCard({
   }
 
   function toggleLike() {
-    if (!requireViewer() || !viewer) return;
+    if (isPending || !requireViewer() || !viewer) return;
     const next = !liked;
     setLiked(next);
     setLikeCount((count) => count + (next ? 1 : -1));
@@ -72,27 +98,8 @@ export default function PostCard({
     });
   }
 
-  function toggleRepost() {
-    if (!requireViewer() || !viewer) return;
-    const next = !reposted;
-    setReposted(next);
-    setRepostCount((count) => count + (next ? 1 : -1));
-
-    startTransition(async () => {
-      const supabase = createClient();
-      const result = next
-        ? await supabase.from("reposts").insert({ post_id: post.id, user_id: viewer.id })
-        : await supabase.from("reposts").delete().eq("post_id", post.id).eq("user_id", viewer.id);
-
-      if (result.error) {
-        setReposted(!next);
-        setRepostCount((count) => count + (next ? -1 : 1));
-      }
-    });
-  }
-
   function toggleBookmark() {
-    if (!requireViewer() || !viewer) return;
+    if (isPending || !requireViewer() || !viewer) return;
     const next = !bookmarked;
     setBookmarked(next);
 
@@ -108,10 +115,20 @@ export default function PostCard({
 
   async function sharePost() {
     const url = `${window.location.origin}/post/${post.id}`;
-    if (navigator.share) {
-      await navigator.share({ title: `Post by ${post.author.name}`, text: post.content, url });
-    } else {
-      await navigator.clipboard.writeText(url);
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `${t("postTitle")} · ${post.author.name}`,
+          text: post.content,
+          url,
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2500);
+      }
+    } catch {
+      // Closing the native share sheet is not an application error.
     }
   }
 
@@ -122,85 +139,105 @@ export default function PostCard({
     startTransition(async () => {
       const supabase = createClient();
       const { error } = await supabase.from("posts").delete().eq("id", post.id);
-      if (!error) router.refresh();
+      if (!error) {
+        const mediaPath = storagePathFromPublicUrl(post.imageUrl);
+        if (mediaPath) {
+          await supabase.storage.from("social-media").remove([mediaPath]);
+        }
+        router.refresh();
+      }
     });
   }
 
   return (
-    <article className={`border-b border-[#2f3336] px-4 py-3 transition hover:bg-white/[0.015] ${detail ? "py-4" : ""}`} aria-busy={isPending}>
+    <article className={`border-b border-[#293036] px-4 py-3 transition hover:bg-white/[0.015] ${detail ? "py-4" : ""}`} aria-busy={isPending}>
       <div className="flex gap-3">
         <Avatar profile={post.author} size={40} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 text-[15px] leading-5">
               <Link href={`/${post.author.username}`} className="inline-flex max-w-full items-center gap-1 font-bold hover:underline">
-                <span className="truncate">{post.author.name}</span>
+                <span className="truncate" dir="auto">{post.author.name}</span>
                 {post.author.verified && <VerifiedBadge />}
               </Link>{" "}
-              <span className="text-[#71767b]">@{post.author.username} · </span>
-              <Link href={`/post/${post.id}`} className="text-[#71767b] hover:underline" title={new Date(post.createdAt).toLocaleString()}>
-                {formatTime(post.createdAt)}
+              <span className="text-[#8a959c]" dir="ltr">@{post.author.username} · </span>
+              <Link
+                href={`/post/${post.id}`}
+                className="text-[#8a959c] hover:underline"
+                title={new Intl.DateTimeFormat(intlLocale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(post.createdAt))}
+              >
+                {formatTime(post.createdAt, intlLocale)}
               </Link>
             </div>
 
-            <div className="relative -mr-2 -mt-2">
-              <button type="button" onClick={() => setMenuOpen((open) => !open)} className="rounded-full p-2 text-[#71767b] transition hover:bg-[#1d9bf0]/10 hover:text-[#1d9bf0]" aria-label="More">
-                <MoreIcon size={19} />
-              </button>
-              {menuOpen && (
-                <div className="absolute right-0 top-9 z-20 min-w-[210px] overflow-hidden rounded-xl bg-black py-1 shadow-[0_0_15px_rgba(255,255,255,0.2)]">
-                  {viewer?.id === post.author.id ? (
-                    <button type="button" onClick={deletePost} className="w-full px-4 py-3 text-left text-[15px] font-bold text-[#f4212e] hover:bg-white/10">
-                      Delete post
+            {viewer?.id === post.author.id && (
+              <div className="relative -me-2 -mt-2">
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((open) => !open)}
+                  disabled={isPending}
+                  className="p-2 text-[#8a959c] transition hover:bg-[#72a7c7]/10 hover:text-[#72a7c7]"
+                  aria-label={t("more")}
+                  aria-expanded={menuOpen}
+                >
+                  <MoreIcon size={19} />
+                </button>
+                {menuOpen && (
+                  <div className="absolute end-0 top-9 z-20 min-w-[210px] border border-[#293036] bg-[#15191c] py-1 shadow-xl">
+                    <button
+                      type="button"
+                      onClick={deletePost}
+                      className="w-full px-4 py-3 text-start text-[15px] font-bold text-[#f25f68] hover:bg-white/[0.06]"
+                    >
+                      {t("deletePost")}
                     </button>
-                  ) : (
-                    <button type="button" onClick={() => setMenuOpen(false)} className="w-full px-4 py-3 text-left text-[15px] font-bold hover:bg-white/10">
-                      Not interested in this post
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <Link href={`/post/${post.id}`} className="block">
-            <p className={`whitespace-pre-wrap break-words text-[#e7e9ea] ${detail ? "mt-3 text-[23px] leading-7" : "mt-0.5 text-[15px] leading-5"}`}>
+            <p dir="auto" className={`whitespace-pre-wrap break-words text-start text-[#e7ebed] ${detail ? "mt-3 text-[23px] leading-7" : "mt-0.5 text-[15px] leading-5"}`}>
               {post.content}
             </p>
 
             {post.imageUrl && (
-              <div className="mt-3 overflow-hidden rounded-2xl border border-[#2f3336]">
+              <div className="mt-3 overflow-hidden border border-[#293036]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={post.imageUrl} alt="Post media" className="max-h-[620px] w-full object-cover" />
+                <img src={post.imageUrl} alt={t("postMediaAlt")} className="max-h-[620px] w-full object-cover" />
               </div>
             )}
           </Link>
 
-          <div className={`mt-2 flex max-w-[430px] items-center justify-between text-[#71767b] ${detail ? "border-t border-[#2f3336] pt-2" : ""}`}>
-            <Link href={`/post/${post.id}`} className="group flex items-center gap-1 text-[13px] transition hover:text-[#1d9bf0]" aria-label={`${post.replyCount} replies`}>
-              <span className="rounded-full p-2 transition group-hover:bg-[#1d9bf0]/10"><ReplyIcon size={18} /></span>
-              {post.replyCount > 0 && <span>{post.replyCount}</span>}
+          <div className={`mt-2 flex max-w-[430px] items-center justify-between text-[#8a959c] ${detail ? "border-t border-[#293036] pt-2" : ""}`}>
+            <Link href={`/post/${post.id}`} className="group flex items-center gap-1 text-[13px] transition hover:text-[#72a7c7]" aria-label={t("repliesCount", { count: numberFormatter.format(post.replyCount) })}>
+              <span className="p-2 transition group-hover:bg-[#72a7c7]/10"><ReplyIcon size={18} /></span>
+              {post.replyCount > 0 && <span>{numberFormatter.format(post.replyCount)}</span>}
             </Link>
 
-            <button type="button" onClick={toggleRepost} className={`group flex items-center gap-1 text-[13px] transition hover:text-[#00ba7c] ${reposted ? "text-[#00ba7c]" : ""}`} aria-label={`${repostCount} reposts`}>
-              <span className="rounded-full p-2 transition group-hover:bg-[#00ba7c]/10"><RepostIcon size={18} /></span>
-              {repostCount > 0 && <span>{repostCount}</span>}
-            </button>
-
-            <button type="button" onClick={toggleLike} className={`group flex items-center gap-1 text-[13px] transition hover:text-[#f91880] ${liked ? "text-[#f91880]" : ""}`} aria-label={`${likeCount} likes`}>
-              <span className="rounded-full p-2 transition group-hover:bg-[#f91880]/10"><HeartIcon size={18} fill={liked ? "currentColor" : "none"} /></span>
-              {likeCount > 0 && <span>{likeCount}</span>}
+            <button
+              type="button"
+              onClick={toggleLike}
+              disabled={isPending}
+              aria-pressed={liked}
+              className={`group flex items-center gap-1 text-[13px] transition hover:text-[#d66a91] disabled:opacity-60 ${liked ? "text-[#d66a91]" : ""}`}
+              aria-label={`${t(liked ? "unlikePost" : "likePost")} · ${t("likesCount", { count: numberFormatter.format(likeCount) })}`}
+            >
+              <span className="p-2 transition group-hover:bg-[#d66a91]/10"><HeartIcon size={18} fill={liked ? "currentColor" : "none"} /></span>
+              {likeCount > 0 && <span>{numberFormatter.format(likeCount)}</span>}
             </button>
 
             <div className="flex items-center">
-              <button type="button" onClick={toggleBookmark} className={`rounded-full p-2 transition hover:bg-[#1d9bf0]/10 hover:text-[#1d9bf0] ${bookmarked ? "text-[#1d9bf0]" : ""}`} aria-label={bookmarked ? "Remove bookmark" : "Bookmark"}>
+              <button type="button" onClick={toggleBookmark} disabled={isPending} aria-pressed={bookmarked} className={`p-2 transition hover:bg-[#72a7c7]/10 hover:text-[#72a7c7] disabled:opacity-60 ${bookmarked ? "text-[#72a7c7]" : ""}`} aria-label={bookmarked ? t("removeBookmark") : t("bookmark")}>
                 <BookmarkIcon size={18} fill={bookmarked ? "currentColor" : "none"} />
               </button>
-              <button type="button" onClick={sharePost} className="rounded-full p-2 transition hover:bg-[#1d9bf0]/10 hover:text-[#1d9bf0]" aria-label="Share post">
+              <button type="button" onClick={sharePost} className="p-2 transition hover:bg-[#72a7c7]/10 hover:text-[#72a7c7]" aria-label={t("sharePost")}>
                 <ShareIcon size={18} />
               </button>
             </div>
           </div>
+          {copied && <p role="status" className="mt-1 text-end text-xs text-[#72a7c7]">{t("copied")}</p>}
         </div>
       </div>
     </article>

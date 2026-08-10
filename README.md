@@ -9,13 +9,15 @@ A portfolio-grade social network inspired by the interaction model and responsiv
 - Public home timeline with 280-character posts
 - Image uploads through Supabase Storage
 - Post detail pages and threaded replies
-- Optimistic likes, reposts, bookmarks, and follows
+- Optimistic likes, bookmarks, and follows
 - Public profiles with avatar, banner, bio, location, and website editing
 - Followers and following lists
 - Explore search across people and posts
+- German-first interface with Persian, Ukrainian, and Arabic translations
+- Native right-to-left layout for Persian and Arabic
 - Private bookmarks and account notifications
 - Database-generated notifications for likes, reposts, replies, and follows
-- Dark X/Twitter-inspired UI with the custom AI Studio identity
+- Dark X/Twitter-inspired UI with the custom AI Studio identity and a Fira Sans / Noto Sans Arabic type system
 
 ## Stack
 
@@ -86,7 +88,6 @@ All exposed tables have Row Level Security enabled. Public timelines can only re
 - `/explore` — people and post search
 - `/notifications` — account activity
 - `/bookmarks` — private saved posts
-- `/messages` — inbox entry page
 - `/post/[id]` — post detail and replies
 - `/[username]` — public profile
 - `/login` and `/register` — authentication

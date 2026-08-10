@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useI18n } from "./I18nProvider";
 
 export default function FollowButton({
   viewerId,
@@ -16,6 +17,7 @@ export default function FollowButton({
   compact?: boolean;
 }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [isFollowing, setIsFollowing] = useState(initiallyFollowing);
   const [isPending, startTransition] = useTransition();
 
@@ -55,18 +57,17 @@ export default function FollowButton({
       type="button"
       onClick={handleClick}
       disabled={isPending}
-      className={`group rounded-full border font-bold transition disabled:opacity-60 ${
+      aria-pressed={isFollowing}
+      aria-label={isFollowing ? t("unfollow") : t("follow")}
+      className={`rounded border font-semibold transition disabled:opacity-60 ${
         compact ? "px-4 py-1.5 text-sm" : "px-5 py-2 text-[15px]"
       } ${
         isFollowing
-          ? "border-[#536471] bg-transparent text-[#eff3f4] hover:border-[#f4212e]/50 hover:bg-[#f4212e]/10 hover:text-[#f4212e]"
-          : "border-white bg-white text-black hover:bg-[#d7dbdc]"
+          ? "border-[#8f5860] bg-transparent text-[#ff9ba4] hover:bg-[#f4212e]/10"
+          : "border-[#72a7c7] bg-[#72a7c7] text-[#071015] hover:bg-[#86b8d4]"
       }`}
     >
-      <span className={isFollowing ? "group-hover:hidden" : ""}>
-        {isFollowing ? "Following" : "Follow"}
-      </span>
-      {isFollowing && <span className="hidden group-hover:inline">Unfollow</span>}
+      {isFollowing ? t("unfollow") : t("follow")}
     </button>
   );
 }
