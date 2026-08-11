@@ -77,6 +77,7 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
         email: email.trim().toLowerCase(),
         password,
         options: {
+          emailRedirectTo: `${window.location.origin}/auth/confirm`,
           data: {
             name: name.trim(),
             username: username.trim().toLowerCase(),
