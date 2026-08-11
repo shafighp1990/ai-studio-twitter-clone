@@ -1,3 +1,5 @@
+import type { ExternalPlatform } from "@/lib/external-posts";
+
 export type Profile = {
   id: string;
   username: string;
@@ -16,6 +18,8 @@ export type FeedPost = {
   id: string;
   content: string;
   imageUrl: string | null;
+  externalPlatform: ExternalPlatform | null;
+  externalUrl: string | null;
   replyToId: string | null;
   createdAt: string;
   author: Profile;

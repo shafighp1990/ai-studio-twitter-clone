@@ -15,6 +15,8 @@ const POST_SELECT = `
   id,
   content,
   image_url,
+  external_platform,
+  external_url,
   reply_to_id,
   created_at,
   author:profiles!posts_author_id_fkey(${PROFILE_COLUMNS}),
@@ -30,6 +32,8 @@ type RawPost = {
   id: string;
   content: string;
   image_url: string | null;
+  external_platform: FeedPost["externalPlatform"];
+  external_url: string | null;
   reply_to_id: string | null;
   created_at: string;
   author: Profile | Profile[];
@@ -51,6 +55,8 @@ function toFeedPost(post: RawPost, viewerId?: string, replyCount = 0): FeedPost 
     id: post.id,
     content: post.content,
     imageUrl: post.image_url,
+    externalPlatform: post.external_platform,
+    externalUrl: post.external_url,
     replyToId: post.reply_to_id,
     createdAt: post.created_at,
     author: firstProfile(post.author),

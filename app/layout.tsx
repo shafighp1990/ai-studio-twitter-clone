@@ -24,11 +24,26 @@ const notoSansArabic = Noto_Sans_Arabic({
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getServerI18n();
   return {
+    metadataBase: new URL(
+      process.env.NEXT_PUBLIC_SITE_URL
+        ?? "https://ai-studio-twitter-clone.arrieschesinnovation.workers.dev",
+    ),
     title: {
       default: t("metaTitle"),
       template: "%s / AI Studio",
     },
     description: t("metaDescription"),
+    openGraph: {
+      type: "website",
+      siteName: "AI Studio",
+      title: t("metaTitle"),
+      description: t("metaDescription"),
+    },
+    twitter: {
+      card: "summary",
+      title: t("metaTitle"),
+      description: t("metaDescription"),
+    },
   };
 }
 

@@ -7,13 +7,14 @@ import { useI18n } from "@/components/I18nProvider";
 import { createClient } from "@/lib/supabase/client";
 import type { FeedPost, Profile } from "@/lib/types";
 import Avatar from "./Avatar";
+import ExternalPostCard from "./ExternalPostCard";
+import ShareMenu from "./ShareMenu";
 import VerifiedBadge from "./VerifiedBadge";
 import {
   BookmarkIcon,
   HeartIcon,
   MoreIcon,
   ReplyIcon,
-  ShareIcon,
 } from "./icons";
 
 function formatTime(value: string, intlLocale: string) {
@@ -67,7 +68,6 @@ export default function PostCard({
   const [bookmarked, setBookmarked] = useState(post.bookmarkedByViewer);
   const [likeCount, setLikeCount] = useState(post.likeCount);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
   const numberFormatter = new Intl.NumberFormat(intlLocale);
 
@@ -111,25 +111,6 @@ export default function PostCard({
 
       if (result.error) setBookmarked(!next);
     });
-  }
-
-  async function sharePost() {
-    const url = `${window.location.origin}/post/${post.id}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: `${t("postTitle")} · ${post.author.name}`,
-          text: post.content,
-          url,
-        });
-      } else {
-        await navigator.clipboard.writeText(url);
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 2500);
-      }
-    } catch {
-      // Closing the native share sheet is not an application error.
-    }
   }
 
   function deletePost() {
@@ -197,18 +178,26 @@ export default function PostCard({
             )}
           </div>
 
-          <Link href={`/post/${post.id}`} className="block">
-            <p dir="auto" className={`whitespace-pre-wrap break-words text-start text-[#e7ebed] ${detail ? "mt-3 text-[23px] leading-7" : "mt-0.5 text-[15px] leading-5"}`}>
-              {post.content}
-            </p>
+          {(post.content || post.imageUrl) && (
+            <Link href={`/post/${post.id}`} className="block">
+              {post.content && (
+                <p dir="auto" className={`whitespace-pre-wrap break-words text-start text-[#e7ebed] ${detail ? "mt-3 text-[23px] leading-7" : "mt-0.5 text-[15px] leading-5"}`}>
+                  {post.content}
+                </p>
+              )}
 
-            {post.imageUrl && (
-              <div className="mt-3 overflow-hidden border border-[#293036]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={post.imageUrl} alt={t("postMediaAlt")} className="max-h-[620px] w-full object-cover" />
-              </div>
-            )}
-          </Link>
+              {post.imageUrl && (
+                <div className="mt-3 overflow-hidden border border-[#293036]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={post.imageUrl} alt={t("postMediaAlt")} className="max-h-[620px] w-full object-cover" />
+                </div>
+              )}
+            </Link>
+          )}
+
+          {post.externalPlatform && post.externalUrl && (
+            <ExternalPostCard url={post.externalUrl} />
+          )}
 
           <div className={`mt-2 flex max-w-[430px] items-center justify-between text-[#8a959c] ${detail ? "border-t border-[#293036] pt-2" : ""}`}>
             <Link href={`/post/${post.id}`} className="group flex items-center gap-1 text-[13px] transition hover:text-[#72a7c7]" aria-label={t("repliesCount", { count: numberFormatter.format(post.replyCount) })}>
@@ -232,12 +221,9 @@ export default function PostCard({
               <button type="button" onClick={toggleBookmark} disabled={isPending} aria-pressed={bookmarked} className={`p-2 transition hover:bg-[#72a7c7]/10 hover:text-[#72a7c7] disabled:opacity-60 ${bookmarked ? "text-[#72a7c7]" : ""}`} aria-label={bookmarked ? t("removeBookmark") : t("bookmark")}>
                 <BookmarkIcon size={18} fill={bookmarked ? "currentColor" : "none"} />
               </button>
-              <button type="button" onClick={sharePost} className="p-2 transition hover:bg-[#72a7c7]/10 hover:text-[#72a7c7]" aria-label={t("sharePost")}>
-                <ShareIcon size={18} />
-              </button>
+              <ShareMenu post={post} />
             </div>
           </div>
-          {copied && <p role="status" className="mt-1 text-end text-xs text-[#72a7c7]">{t("copied")}</p>}
         </div>
       </div>
     </article>

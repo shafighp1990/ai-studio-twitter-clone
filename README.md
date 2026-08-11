@@ -7,6 +7,10 @@ A portfolio-grade social network inspired by the interaction model and responsiv
 - Responsive three-column desktop layout and mobile bottom navigation
 - Secure email/password authentication with Supabase Auth and SSR cookies
 - Public home timeline with 280-character posts
+- Quote and discuss public posts from X, Instagram, and Facebook without copying their media
+- Provider-labelled source cards with permanent original links and official X actions
+- Share AI Studio posts to X, Facebook, Instagram-capable device apps, or the clipboard
+- Post-specific Open Graph and X card metadata for inbound social traffic
 - Image uploads through Supabase Storage
 - Post detail pages and threaded replies
 - Optimistic likes, bookmarks, and follows
@@ -16,7 +20,7 @@ A portfolio-grade social network inspired by the interaction model and responsiv
 - German-first interface with Persian, Ukrainian, and Arabic translations
 - Native right-to-left layout for Persian and Arabic
 - Private bookmarks and account notifications
-- Database-generated notifications for likes, reposts, replies, and follows
+- Database-generated notifications for likes, replies, and follows
 - Dark X/Twitter-inspired UI with the custom AI Studio identity and a Fira Sans / Noto Sans Arabic type system
 
 ## Stack
@@ -41,6 +45,7 @@ A portfolio-grade social network inspired by the interaction model and responsiv
    ```env
    NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key
+   NEXT_PUBLIC_SITE_URL=http://localhost:3000
    ```
 
 3. Apply the SQL files in `supabase/migrations` to a Supabase project.
@@ -68,6 +73,7 @@ For Cloudflare Workers Builds, use `npm run build:cloudflare` as the build comma
 ```env
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+NEXT_PUBLIC_SITE_URL=https://your-worker.example.workers.dev
 ```
 
 ## Quality checks
@@ -80,7 +86,7 @@ npm audit
 
 ## Security
 
-All exposed tables have Row Level Security enabled. Public timelines can only read public social data. Creating or modifying posts, likes, reposts, follows, bookmarks, notifications, and media requires an authenticated user, with ownership verified in the database policies. The browser receives only the Supabase publishable key; no service-role key is used by the application.
+All exposed tables have Row Level Security enabled. Public timelines can only read public social data. Creating or modifying posts, likes, follows, bookmarks, notifications, and media requires an authenticated user, with ownership verified in the database policies. External-source URLs are restricted to canonical HTTPS post links from X, Instagram, or Facebook; AI Studio never copies their captions or media and does not execute provider scripts inside the application. The browser receives only the Supabase publishable key; no service-role key is used by the application.
 
 ## Main routes
 

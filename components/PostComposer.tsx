@@ -3,10 +3,14 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/I18nProvider";
+import {
+  externalPlatformLabel,
+  parseExternalPostUrl,
+} from "@/lib/external-posts";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/types";
 import Avatar from "./Avatar";
-import { CloseIcon, ImageIcon } from "./icons";
+import { CloseIcon, ImageIcon, LinkIcon } from "./icons";
 
 export default function PostComposer({
   viewer,
@@ -22,13 +26,23 @@ export default function PostComposer({
   const { intlLocale, t } = useI18n();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const externalUrlInputRef = useRef<HTMLInputElement>(null);
+  const externalSourceTriggerRef = useRef<HTMLButtonElement>(null);
   const [content, setContent] = useState("");
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [externalFieldOpen, setExternalFieldOpen] = useState(false);
+  const [externalUrl, setExternalUrl] = useState("");
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   const remaining = 280 - content.length;
-  const canPost = content.trim().length > 0 && remaining >= 0 && !isPending;
+  const externalReference = parseExternalPostUrl(externalUrl);
+  const hasExternalUrl = externalUrl.trim().length > 0;
+  const hasPostBody = content.trim().length > 0 || Boolean(externalReference);
+  const canPost = hasPostBody
+    && remaining >= 0
+    && (!hasExternalUrl || Boolean(externalReference))
+    && !isPending;
 
   function handleImage(file?: File) {
     setError("");
@@ -55,6 +69,14 @@ export default function PostComposer({
     setImage(null);
     setPreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function removeExternalSource(restoreFocus = false) {
+    setExternalUrl("");
+    setExternalFieldOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => externalSourceTriggerRef.current?.focus());
+    }
   }
 
   function handleSubmit(event: React.FormEvent) {
@@ -89,6 +111,8 @@ export default function PostComposer({
         author_id: viewer.id,
         content: content.trim(),
         image_url: imageUrl,
+        external_platform: externalReference?.platform ?? null,
+        external_url: externalReference?.url ?? null,
         reply_to_id: replyToId ?? null,
       });
 
@@ -102,6 +126,7 @@ export default function PostComposer({
 
       setContent("");
       removeImage();
+      removeExternalSource();
       router.refresh();
     });
   }
@@ -117,7 +142,11 @@ export default function PostComposer({
         <textarea
           value={content}
           onChange={(event) => setContent(event.target.value)}
-          placeholder={placeholder ?? (replyToId ? t("replyPlaceholder") : t("composerPlaceholder"))}
+          placeholder={placeholder ?? (externalReference
+            ? t("externalCommentPlaceholder")
+            : replyToId
+              ? t("replyPlaceholder")
+              : t("composerPlaceholder"))}
           rows={compact ? 2 : 3}
           maxLength={280}
           dir="auto"
@@ -140,6 +169,58 @@ export default function PostComposer({
           </div>
         )}
 
+        {externalFieldOpen && (
+          <div id={`external-source-${replyToId ?? "post"}`} className="mt-2 border border-[#364048] bg-[#101315] p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <label htmlFor={`external-url-${replyToId ?? "post"}`} className="block text-sm font-semibold text-[#d8dee2]">
+                  {t("externalUrlLabel")}
+                </label>
+                <input
+                  ref={externalUrlInputRef}
+                  id={`external-url-${replyToId ?? "post"}`}
+                  name="externalUrl"
+                  type="url"
+                  inputMode="url"
+                  dir="ltr"
+                  value={externalUrl}
+                  onChange={(event) => setExternalUrl(event.target.value)}
+                  placeholder={t("externalUrlPlaceholder")}
+                  aria-describedby={`external-help-${replyToId ?? "post"}${hasExternalUrl && !externalReference ? ` external-error-${replyToId ?? "post"}` : ""}`}
+                  aria-errormessage={hasExternalUrl && !externalReference ? `external-error-${replyToId ?? "post"}` : undefined}
+                  aria-invalid={hasExternalUrl && !externalReference}
+                  className="mt-2 w-full border border-[#52616b] bg-[#0b0d0e] px-3 py-2 text-start text-sm text-[#e7ebed] outline-none placeholder:text-[#6f7b82] focus:border-[#72a7c7]"
+                />
+                <p id={`external-help-${replyToId ?? "post"}`} className="mt-2 text-xs leading-5 text-[#8a959c]">
+                  {t("externalUrlHelp")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeExternalSource(true)}
+                className="p-1 text-[#8a959c] hover:text-[#e7ebed]"
+                aria-label={t("externalRemoveSource")}
+              >
+                <CloseIcon size={18} />
+              </button>
+            </div>
+
+            {hasExternalUrl && !externalReference && (
+              <p id={`external-error-${replyToId ?? "post"}`} role="alert" className="mt-2 text-sm text-[#f25f68]">
+                {t("externalUrlInvalid")}
+              </p>
+            )}
+
+            {externalReference && (
+              <p role="status" className="mt-2 break-all text-sm text-[#72a7c7]" dir="auto">
+                {t("externalSourceReady", {
+                  platform: externalPlatformLabel(externalReference.platform),
+                })}
+              </p>
+            )}
+          </div>
+        )}
+
         {error && <p role="alert" className="mt-2 text-sm text-[#f25f68]">{error}</p>}
 
         <div className="mt-2 flex items-center justify-between border-t border-[#293036] pt-2">
@@ -158,6 +239,23 @@ export default function PostComposer({
               aria-label={t("addImage")}
             >
               <ImageIcon size={20} />
+            </button>
+            <button
+              ref={externalSourceTriggerRef}
+              type="button"
+              onClick={() => {
+                if (externalFieldOpen) removeExternalSource(true);
+                else {
+                  setExternalFieldOpen(true);
+                  window.requestAnimationFrame(() => externalUrlInputRef.current?.focus());
+                }
+              }}
+              className={`p-2 transition hover:bg-[#72a7c7]/10 ${externalFieldOpen ? "bg-[#72a7c7]/10" : ""}`}
+              aria-label={t("externalQuoteAction")}
+              aria-expanded={externalFieldOpen}
+              aria-controls={`external-source-${replyToId ?? "post"}`}
+            >
+              <LinkIcon size={20} />
             </button>
           </div>
 
