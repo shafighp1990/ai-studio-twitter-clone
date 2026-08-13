@@ -7,7 +7,7 @@ import EditProfileButton from "./EditProfileButton";
 import FollowButton from "./FollowButton";
 import { useI18n } from "./I18nProvider";
 import VerifiedBadge from "./VerifiedBadge";
-import { CalendarIcon, LinkIcon, LocationIcon } from "./icons";
+import { CalendarIcon, LinkIcon, LocationIcon, ShieldIcon } from "./icons";
 
 function websiteHref(website: string) {
   return /^https?:\/\//i.test(website) ? website : `https://${website}`;
@@ -34,9 +34,20 @@ export default function ProfileHeader({ profile, viewer }: { profile: ProfileSum
           <div className="-mt-[75px] rounded-full border-4 border-[#0b0d0e] bg-[#2a3136]">
             <Avatar profile={profile} size={142} link={false} />
           </div>
-          <div className="pt-3">
+          <div className="flex items-center gap-2 pt-3">
             {ownProfile ? (
-              <EditProfileButton profile={profile} />
+              <>
+                <Link
+                  href="/settings/security"
+                  aria-label={t("securitySettings")}
+                  title={t("securitySettings")}
+                  className="flex h-10 items-center gap-2 rounded-full border border-[#536471] px-3 font-semibold transition hover:bg-white/[0.06]"
+                >
+                  <ShieldIcon size={18} />
+                  <span className="hidden text-sm sm:inline">{t("securitySettings")}</span>
+                </Link>
+                <EditProfileButton profile={profile} />
+              </>
             ) : (
               <FollowButton viewerId={viewer?.id} profileId={profile.id} initiallyFollowing={profile.followedByViewer} />
             )}

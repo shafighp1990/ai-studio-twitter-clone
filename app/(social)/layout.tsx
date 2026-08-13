@@ -1,10 +1,15 @@
+import { redirect } from "next/navigation";
 import Navigation from "@/components/Navigation";
 import RightRail from "@/components/RightRail";
+import { getMfaGateState } from "@/lib/auth/mfa";
 import { getSuggestedProfiles, getViewer } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function SocialLayout({ children }: { children: React.ReactNode }) {
+  const mfaState = await getMfaGateState();
+  if (mfaState.requiresChallenge) redirect("/auth/mfa");
+
   const [viewer, suggestions] = await Promise.all([
     getViewer(),
     getSuggestedProfiles(3),

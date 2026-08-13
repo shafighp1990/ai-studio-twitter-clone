@@ -68,7 +68,19 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
           return;
         }
 
-        router.push("/");
+        const { data: assurance, error: assuranceError } =
+          await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+
+        if (assuranceError) {
+          setErrorKey("authGenericError");
+          return;
+        }
+
+        router.replace(
+          assurance.currentLevel !== "aal2" && assurance.nextLevel === "aal2"
+            ? "/auth/mfa"
+            : "/",
+        );
         router.refresh();
         return;
       }

@@ -109,3 +109,6 @@ export const CheckIcon = (props: IconProps) => (
 export const CloseIcon = (props: IconProps) => (
   <IconBase {...props}><path d="m6 6 12 12M18 6 6 18" /></IconBase>
 );
+export const ShieldIcon = (props: IconProps) => (
+  <IconBase {...props}><path d="M12 3 5 6v5c0 4.7 2.8 8.3 7 10 4.2-1.7 7-5.3 7-10V6l-7-3Z" /><path d="m9 12 2 2 4-4" /></IconBase>
+);
