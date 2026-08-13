@@ -26,7 +26,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(
       process.env.NEXT_PUBLIC_SITE_URL
-        ?? "https://ai-studio-twitter-clone.arrieschesinnovation.workers.dev",
+        ?? "https://ai-studio-twitter-clone.aistudiotest.workers.dev",
     ),
     title: {
       default: t("metaTitle"),
