@@ -13,7 +13,7 @@ const topics = [
   { key: "topicWeb" },
   { key: "topicDesign" },
   { key: "topicNext" },
-  { key: "topicSupabase" },
+  { key: "topicCloudflare" },
 ] as const;
 
 export default function RightRail({

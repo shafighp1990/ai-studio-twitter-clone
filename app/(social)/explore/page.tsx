@@ -11,7 +11,7 @@ const topics: { label: MessageKey }[] = [
   { label: "topicWeb" },
   { label: "topicDesign" },
   { label: "topicNext" },
-  { label: "topicSupabase" },
+  { label: "topicCloudflare" },
 ];
 
 export default async function ExplorePage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {

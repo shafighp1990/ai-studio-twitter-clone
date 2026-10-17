@@ -3,12 +3,31 @@
   "name": "ai-studio-twitter-clone",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-08-08",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
   "observability": {
     "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "arrisches-communication",
+      "database_id": "f6a1ad13-601c-4074-8b40-90a6a71add76",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "arrisches-communication-media"
+    }
+  ],
+  "vars": {
+    "NEXT_PUBLIC_SITE_URL": "https://ai-studio-twitter-clone.aistudiotest.workers.dev"
   }
 }

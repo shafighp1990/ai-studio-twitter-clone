@@ -7,7 +7,7 @@ import {
   externalPlatformLabel,
   parseExternalPostUrl,
 } from "@/lib/external-posts";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/cloudflare/client";
 import type { Profile } from "@/lib/types";
 import Avatar from "./Avatar";
 import { CloseIcon, ImageIcon, LinkIcon } from "./icons";
@@ -86,14 +86,14 @@ export default function PostComposer({
     if (!canPost) return;
 
     startTransition(async () => {
-      const supabase = createClient();
+      const client = createClient();
       let imageUrl: string | null = null;
       let uploadedPath: string | null = null;
 
       if (image) {
         const extension = image.name.split(".").pop()?.toLowerCase() || "jpg";
         const filePath = `${viewer.id}/posts/${crypto.randomUUID()}.${extension}`;
-        const { error: uploadError } = await supabase.storage
+        const { error: uploadError } = await client.storage
           .from("social-media")
           .upload(filePath, image, { cacheControl: "3600", upsert: false });
 
@@ -103,11 +103,11 @@ export default function PostComposer({
         }
 
         uploadedPath = filePath;
-        imageUrl = supabase.storage.from("social-media").getPublicUrl(filePath)
+        imageUrl = client.storage.from("social-media").getPublicUrl(filePath)
           .data.publicUrl;
       }
 
-      const { error: postError } = await supabase.from("posts").insert({
+      const { error: postError } = await client.from("posts").insert({
         author_id: viewer.id,
         content: content.trim(),
         image_url: imageUrl,
@@ -118,7 +118,7 @@ export default function PostComposer({
 
       if (postError) {
         if (uploadedPath) {
-          await supabase.storage.from("social-media").remove([uploadedPath]);
+          await client.storage.from("social-media").remove([uploadedPath]);
         }
         setError(t("requestFailed"));
         return;

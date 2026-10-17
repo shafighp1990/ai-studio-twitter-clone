@@ -15,7 +15,7 @@ export default function Avatar({
 }) {
   const { t } = useI18n();
   const avatar = profile.avatar_url ? (
-    // User-controlled Supabase Storage URLs are intentionally rendered directly.
+    // User-controlled Cloudflare Storage URLs are intentionally rendered directly.
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={profile.avatar_url}
