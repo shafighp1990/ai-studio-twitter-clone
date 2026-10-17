@@ -5,6 +5,7 @@ export async function getMfaGateState() {
   const a = await assurance();
   return {
     signedIn: !!s,
+    requiresPasswordChange: !!s?.must_change_password,
     ...a,
     requiresChallenge:
       !!s && a.currentLevel !== "aal2" && a.nextLevel === "aal2",

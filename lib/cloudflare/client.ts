@@ -39,9 +39,12 @@ export function createClient() {
       refreshSession: () => request("/api/auth/refresh", {}),
       mfa: {
         getAuthenticatorAssuranceLevel: () =>
-          request<{ currentLevel: string | null; nextLevel: string | null }>(
-            "/api/auth/assurance",
-          ),
+          request<{
+            currentLevel: string | null;
+            mustChangePassword: boolean;
+            isAdmin: boolean;
+            nextLevel: string | null;
+          }>("/api/auth/assurance"),
         listFactors: () =>
           request<{ totp: Factor[]; all: Factor[] }>("/api/auth/factors"),
         enroll: (_b: unknown) => {

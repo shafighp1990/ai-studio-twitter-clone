@@ -79,7 +79,7 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
         router.replace(
           assurance.currentLevel !== "aal2" && assurance.nextLevel === "aal2"
             ? "/auth/mfa"
-            : "/",
+            : assurance.mustChangePassword ? "/auth/change-password" : assurance.isAdmin ? "/admin" : "/",
         );
         router.refresh();
         return;

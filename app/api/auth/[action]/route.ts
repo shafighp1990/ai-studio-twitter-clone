@@ -70,8 +70,13 @@ export async function POST(
         throw new HttpError("Invalid credentials");
       await limit("login:" + email, 15, 300);
       if (action === "login") {
-        const u = await one<{ id: string; password_hash: string }>(
-          "SELECT id,password_hash FROM users WHERE email=?",
+        const u = await one<{
+          id: string;
+          password_hash: string;
+          disabled: number;
+          auth_version: number;
+        }>(
+          "SELECT id,password_hash,disabled,auth_version FROM users WHERE email=?",
           email,
         );
         const valid = await bcrypt.compare(
@@ -79,9 +84,10 @@ export async function POST(
           u?.password_hash ??
             "$2b$12$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy",
         );
-        if (!u || !valid) throw new HttpError("Invalid credentials", 401);
+        if (!u || !valid || u.disabled)
+          throw new HttpError("Invalid credentials", 401);
         await logout();
-        await newSession(u.id);
+        await newSession(u.id, 1, u.auth_version);
         return json({ data: { session: true }, error: null });
       }
       const username = String(b.options?.data?.username ?? ""),
@@ -91,6 +97,7 @@ export async function POST(
         !name ||
         name.length > 50 ||
         [
+          "admin",
           "login",
           "register",
           "meet",
@@ -133,6 +140,44 @@ export async function POST(
     if (action === "refresh")
       return json({ data: await assurance(), error: null });
     const s = await requireSession(true);
+    if (action === "change-password") {
+      const a = await assurance();
+      if (a.nextLevel === "aal2" && a.currentLevel !== "aal2")
+        throw new HttpError("Verify your authenticator first", 403);
+      await limit("password-change:" + s.user_id, 8, 300);
+      const password = String(b.newPassword ?? ""),
+        current = String(b.currentPassword ?? "");
+      if (
+        password.length < 12 ||
+        new TextEncoder().encode(password).length > 72 ||
+        password === current
+      )
+        throw new HttpError("Use a different password, 12–72 bytes long");
+      const u = await one<{ password_hash: string }>(
+        "SELECT password_hash FROM users WHERE id=?",
+        s.user_id,
+      );
+      if (!u || !(await bcrypt.compare(current, u.password_hash)))
+        throw new HttpError("Current password is incorrect", 403);
+      const hash = await bcrypt.hash(password, 12),
+        d = await db();
+      const result = await d.batch([
+        d
+          .prepare(
+            "UPDATE users SET password_hash=?,must_change_password=0,auth_version=auth_version+1 WHERE id=? AND auth_version=? AND disabled=0",
+          )
+          .bind(hash, s.user_id, s.auth_version),
+        d.prepare("DELETE FROM sessions WHERE user_id=?").bind(s.user_id),
+        d.prepare("DELETE FROM participants WHERE user_id=?").bind(s.user_id),
+      ]);
+      if (result[0].meta.changes !== 1)
+        throw new HttpError("Sign in again", 401);
+      await newSession(s.user_id, s.aal, s.auth_version + 1);
+      return json({
+        data: { redirect: s.is_admin ? "/admin" : "/" },
+        error: null,
+      });
+    }
     if (action === "enroll") {
       await requireSession();
       const current = await all(

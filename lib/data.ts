@@ -11,7 +11,7 @@ const authorJson = `json_object('id',p.id,'username',p.username,'name',p.name,'b
 export async function getViewer() {
   const s = await session();
   return s
-    ? one<Profile>("SELECT * FROM profiles WHERE id=?", s.user_id)
+    ? one<Profile>("SELECT p.*,u.is_admin AS isAdmin FROM profiles p JOIN users u ON u.id=p.id WHERE p.id=?", s.user_id)
     : null;
 }
 type PostRow = {

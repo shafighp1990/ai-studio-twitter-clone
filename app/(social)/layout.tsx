@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function SocialLayout({ children }: { children: React.ReactNode }) {
   const mfaState = await getMfaGateState();
   if (mfaState.requiresChallenge) redirect("/auth/mfa");
+  if (mfaState.requiresPasswordChange) redirect("/auth/change-password");
 
   const [viewer, suggestions] = await Promise.all([
     getViewer(),

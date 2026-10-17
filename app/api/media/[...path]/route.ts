@@ -6,6 +6,7 @@ import {
   HttpError,
   json,
   limit,
+  one,
   sameOrigin,
 } from "@/lib/cloudflare/db";
 type Ctx = { params: Promise<{ path: string[] }> };
@@ -19,6 +20,8 @@ function valid(key: string) {
 export async function GET(_req: Request, { params }: Ctx) {
   try {
     const key = (await params).path.join("/");
+    if (await one("SELECT key FROM removed_media WHERE key=?", key))
+      throw new HttpError("Not found", 404);
     if (!valid(key)) throw new HttpError("Not found", 404);
     const file = await (await env()).MEDIA.get(key);
     if (!file) throw new HttpError("Not found", 404);
@@ -26,7 +29,7 @@ export async function GET(_req: Request, { params }: Ctx) {
       headers: {
         "Content-Type":
           file.httpMetadata?.contentType ?? "application/octet-stream",
-        "Cache-Control": "public,max-age=3600",
+        "Cache-Control": "no-cache",
         "X-Content-Type-Options": "nosniff",
         "Content-Security-Policy": "default-src 'none'; sandbox",
       },
@@ -43,6 +46,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     const key = (await params).path.join("/");
     if (!valid(key) || !key.startsWith(s.user_id + "/"))
       throw new HttpError("Invalid path", 403);
+    if (await one("SELECT key FROM removed_media WHERE key=?", key))
+      throw new HttpError("Upload a new file", 403);
     const type = req.headers.get("content-type") ?? "";
     if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(type))
       throw new HttpError("Use JPEG, PNG, WebP or GIF");

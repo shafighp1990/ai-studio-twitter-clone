@@ -7,17 +7,21 @@ export type Session = {
   aal: number;
   expires_at: number;
   mfa_verified_at: number | null;
+  is_admin: number;
+  must_change_password: number;
+  auth_version: number;
 };
 export const SESSION_COOKIE = "arr_session";
 export async function session(allowPending = false): Promise<Session | null> {
   const raw = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!raw) return null;
   const s = await one<Session>(
-    "SELECT * FROM sessions WHERE id=? AND expires_at>?",
+    "SELECT s.*,u.is_admin,u.must_change_password FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>? AND u.disabled=0 AND s.auth_version=u.auth_version",
     await digest(raw),
     Date.now(),
   );
   if (!s) return null;
+  if (!allowPending && s.must_change_password) return null;
   if (
     !allowPending &&
     s.aal < 2 &&
@@ -34,17 +38,21 @@ export async function requireSession(allowPending = false) {
   if (!s) throw new HttpError("Sign in required", 401);
   return s;
 }
-export async function newSession(userId: string, aal = 1) {
+export async function newSession(userId: string, aal = 1, authVersion = 0) {
   const raw = token();
   const id = await digest(raw);
-  await run(
-    "INSERT INTO sessions(id,user_id,aal,expires_at,mfa_verified_at) VALUES(?,?,?,?,?)",
+  const inserted = await run(
+    "INSERT INTO sessions(id,user_id,aal,expires_at,mfa_verified_at,auth_version) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND disabled=0 AND auth_version=?)",
     id,
     userId,
     aal,
     Date.now() + 30 * 86400000,
     aal === 2 ? Date.now() : null,
+    authVersion,
+    userId,
+    authVersion,
   );
+  if (inserted.meta.changes !== 1) throw new HttpError("Sign in again", 401);
   (await cookies()).set(SESSION_COOKIE, raw, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -70,6 +78,8 @@ export async function assurance() {
   return {
     currentLevel: s ? (s.aal === 2 ? "aal2" : "aal1") : null,
     nextLevel: s ? (has ? "aal2" : "aal1") : null,
+    mustChangePassword: !!s?.must_change_password,
+    isAdmin: !!s?.is_admin,
   };
 }
 export type Factor = {
@@ -206,7 +216,7 @@ export async function verifyFactor(s: Session, id: string, code: string) {
           .bind(s.user_id, s.id),
         (await db()).prepare("DELETE FROM sessions WHERE id=?").bind(s.id),
       ]);
-      await newSession(s.user_id, 2);
+      await newSession(s.user_id, 2, s.auth_version);
       return;
     }
   }

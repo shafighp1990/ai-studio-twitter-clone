@@ -52,6 +52,7 @@ export default function Navigation({ viewer }: { viewer: Profile | null }) {
           </Link>
 
           <nav aria-label={t("primaryNavigation")}>
+            {!!viewer?.isAdmin&&<Link href="/admin" className="flex items-center gap-5 rounded-lg px-3 py-3 text-xl text-amber-200" aria-label="مدیریت سایت"><span aria-hidden="true">◈</span><span className="hidden xl:inline">مدیریت سایت</span></Link>}
             <Link href="/meetings" className="flex items-center gap-5 rounded-lg px-3 py-3 text-xl text-[#9bc8e3]" aria-label={meetingMessages[locale].title}><span aria-hidden="true">▣</span><span className="hidden xl:inline">{meetingMessages[locale].title}</span></Link>
             {navigation.map((item) => {
               const Icon = item.icon;
@@ -147,6 +148,7 @@ export default function Navigation({ viewer }: { viewer: Profile | null }) {
         className="fixed inset-x-0 bottom-0 z-50 flex h-[56px] items-center justify-around border-t border-[#293036] bg-[#0b0d0e]/95 px-2 sm:hidden"
         aria-label={t("mobileNavigation")}
       >
+        {!!viewer?.isAdmin&&<Link href="/admin" aria-label="مدیریت سایت" className="rounded-lg p-2 text-xl text-amber-200">◈</Link>}
         <Link href="/meetings" className="rounded-lg p-2.5 text-xl text-[#9bc8e3]" aria-label={meetingMessages[locale].title}>▣</Link>
         {navigation.map((item) => {
           const Icon = item.icon;
