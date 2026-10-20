@@ -1,45 +1,37 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { submitPasswordChange } from "@/lib/auth/password-change";
 export default function ChangePasswordForm({
   required,
 }: {
   required: boolean;
 }) {
-  const router = useRouter();
   const [current, setCurrent] = useState(""),
     [password, setPassword] = useState(""),
     [repeat, setRepeat] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (password !== repeat) {
+    if (busy) return;
+    // Read the actual fields so password-manager autofill is submitted too.
+    const values = new FormData(e.currentTarget);
+    const currentValue = String(values.get("currentPassword") ?? "");
+    const nextValue = String(values.get("newPassword") ?? "");
+    const repeatedValue = String(values.get("repeatPassword") ?? "");
+    if (nextValue !== repeatedValue) {
       setError("تکرار رمز یکسان نیست.");
       return;
     }
     setBusy(true);
     setError("");
     try {
-      const r = await fetch("/api/auth/change-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          currentPassword: current,
-          newPassword: password,
-        }),
-      });
-      const j = (await r.json()) as {
-        data?: { redirect: string };
-        error?: { message: string };
-      };
-      if (!r.ok) throw new Error(j.error?.message);
+      const redirect = await submitPasswordChange(currentValue, nextValue);
       setCurrent("");
       setPassword("");
       setRepeat("");
-      router.replace(j.data?.redirect ?? "/");
-      router.refresh();
+      window.location.replace(redirect);
     } catch (e) {
       setError(e instanceof Error ? e.message : "تغییر رمز انجام نشد.");
     } finally {
@@ -60,18 +52,21 @@ export default function ChangePasswordForm({
       <form onSubmit={submit} className="space-y-5">
         {[
           {
+            name: "currentPassword",
             label: required ? "رمز موقت" : "رمز فعلی",
             value: current,
             set: setCurrent,
             auto: "current-password",
           },
           {
+            name: "newPassword",
             label: "رمز تازه (حداقل ۱۲ کاراکتر)",
             value: password,
             set: setPassword,
             auto: "new-password",
           },
           {
+            name: "repeatPassword",
             label: "تکرار رمز تازه",
             value: repeat,
             set: setRepeat,
@@ -81,6 +76,9 @@ export default function ChangePasswordForm({
           <label key={i} className="block text-sm">
             {f.label}
             <input
+              id={f.name}
+              name={f.name}
+              dir="ltr"
               type="password"
               autoComplete={f.auto}
               required
