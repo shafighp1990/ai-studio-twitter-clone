@@ -83,6 +83,10 @@ export default function MeetingRoom({
     [statuses, setStatuses] = useState<Record<string, string>>({}),
     [mic, setMic] = useState(true),
     [camera, setCamera] = useState(true),
+    [cameras, setCameras] = useState<MediaDeviceInfo[]>([]),
+    [cameraId, setCameraId] = useState(""),
+    [cameraBusy, setCameraBusy] = useState(false),
+    [cameraError, setCameraError] = useState(""),
     [sharing, setSharing] = useState(false),
     [invite, setInvite] = useState(""),
     [copied, setCopied] = useState(false),
@@ -98,7 +102,8 @@ export default function MeetingRoom({
     inviteSecret = useRef(""),
     start = useRef(0),
     elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null),
-    signalChain = useRef(Promise.resolve());
+    signalChain = useRef(Promise.resolve()),
+    cameraChanging = useRef(false);
   const endpoint = "/api/meetings/" + room.id;
   useEffect(() => {
     const peersToClose = connections.current;
@@ -120,6 +125,81 @@ export default function MeetingRoom({
       displayStream.current?.getTracks().forEach((t) => t.stop());
     };
   }, [room.id]);
+  useEffect(() => {
+    if (!joined || !navigator.mediaDevices?.enumerateDevices) return;
+    let live = true;
+    const devices = navigator.mediaDevices;
+    async function refresh() {
+      try {
+        const available = await devices.enumerateDevices();
+        if (live) setCameras(available.filter((d) => d.kind === "videoinput"));
+      } catch {
+        // Keep the current camera if device enumeration is unavailable.
+      }
+    }
+    void refresh();
+    devices.addEventListener?.("devicechange", refresh);
+    return () => {
+      live = false;
+      devices.removeEventListener?.("devicechange", refresh);
+    };
+  }, [joined]);
+  async function changeCamera(deviceId: string) {
+    const original = localStream.current;
+    const oldTrack = original?.getVideoTracks()[0];
+    if (!original || !oldTrack || !deviceId || cameraChanging.current || displayStream.current) return;
+    cameraChanging.current = true;
+    setCameraBusy(true);
+    setCameraError("");
+    let acquired: MediaStream | null = null;
+    try {
+      acquired = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          deviceId: { exact: deviceId },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 24, max: 30 },
+        },
+      });
+      if (!active.current || localStream.current !== original || displayStream.current) {
+        acquired.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      const track = acquired.getVideoTracks()[0];
+      if (!track) throw new Error("Camera track missing");
+      track.enabled = oldTrack.enabled;
+      const replacement = new MediaStream([...original.getAudioTracks(), track]);
+      // Peers joining while replacement is pending must also use the new camera.
+      localStream.current = replacement;
+      const senders = () => [...connections.current.values()].flatMap((c) => {
+        const sender = c.pc.getTransceivers().find((t) => t.receiver.track.kind === "video")?.sender;
+        return sender ? [sender] : [];
+      });
+      const results = await Promise.allSettled(senders().map((sender) => sender.replaceTrack(track)));
+      if (results.some((result) => result.status === "rejected")) {
+        if (active.current && localStream.current === replacement) {
+          localStream.current = original;
+          await Promise.allSettled(senders().map((sender) => sender.replaceTrack(oldTrack)));
+        }
+        throw new Error("Camera replacement failed");
+      }
+      oldTrack.stop();
+      if (!active.current || localStream.current !== replacement) {
+        acquired.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      setLocal(replacement);
+      setCameraId(track.getSettings().deviceId || deviceId);
+    } catch {
+      acquired?.getTracks().forEach((t) => t.stop());
+      if (!active.current) oldTrack.stop();
+      else setCameraError(m.cameraSwitchError);
+    } finally {
+      cameraChanging.current = false;
+      setCameraBusy(false);
+    }
+  }
   async function api(value: unknown) {
     const r = await fetch(endpoint, {
       method: "POST",
@@ -298,6 +378,8 @@ export default function MeetingRoom({
     setLocal(null);
     setJoined(false);
     setSharing(false);
+    setCameras([]);
+    setCameraError("");
     setPeers([]);
     setStreams({});
   }
@@ -336,6 +418,8 @@ export default function MeetingRoom({
       setLocal(stream);
       setMic(stream.getAudioTracks().length > 0);
       setCamera(stream.getVideoTracks().length > 0);
+      setCameraId(stream.getVideoTracks()[0]?.getSettings().deviceId ?? "");
+      setCameraError("");
       ice.current = result.iceServers;
       myId.current = result.participantId;
       cursor.current = 0;
@@ -557,7 +641,7 @@ export default function MeetingRoom({
               <button
                 className="meeting-button"
                 aria-pressed={camera}
-                disabled={!local?.getVideoTracks().length}
+                disabled={cameraBusy || !local?.getVideoTracks().length}
                 onClick={() => {
                   localStream.current
                     ?.getVideoTracks()
@@ -567,7 +651,29 @@ export default function MeetingRoom({
               >
                 {camera ? "●" : "○"} {m.camera}
               </button>
-              <button className="meeting-button" onClick={() => void share()}>
+              {local?.getVideoTracks().length ? (
+                <label className="flex min-w-0 flex-col gap-1 text-xs text-[#a5afb5]">
+                  {m.cameraSource}
+                  <select
+                    aria-label={m.cameraSource}
+                    value={cameraId}
+                    disabled={cameraBusy || sharing || cameras.length === 0}
+                    onChange={(e) => void changeCamera(e.target.value)}
+                    className="max-w-full rounded-lg border border-[#52616b] bg-[#080d11] p-2 text-sm text-white sm:max-w-64"
+                  >
+                    {!cameras.some((device) => device.deviceId === cameraId) && (
+                      <option value={cameraId}>{m.cameraCurrent}</option>
+                    )}
+                    {cameras.map((device, i) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `${m.camera} ${i + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                  {sharing && <span>{m.cameraShareHint}</span>}
+                </label>
+              ) : null}
+              <button disabled={cameraBusy} className="meeting-button" onClick={() => void share()}>
                 {sharing ? m.stopShare : m.share}
               </button>
               <button
@@ -592,6 +698,11 @@ export default function MeetingRoom({
               )}
             </div>
           </>
+        )}
+        {cameraError && (
+          <p role="alert" className="mx-auto my-5 max-w-2xl rounded-lg border border-red-900 bg-red-950/30 p-4 text-sm text-red-200">
+            {cameraError}
+          </p>
         )}
         {error && (
           <p
