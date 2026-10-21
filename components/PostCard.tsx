@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useI18n } from "@/components/I18nProvider";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/cloudflare/client";
 import type { FeedPost, Profile } from "@/lib/types";
 import Avatar from "./Avatar";
 import ExternalPostCard from "./ExternalPostCard";
@@ -42,8 +42,8 @@ function formatTime(value: string, intlLocale: string) {
 function storagePathFromPublicUrl(url: string | null) {
   if (!url) return null;
   try {
-    const marker = "/storage/v1/object/public/social-media/";
-    const pathname = new URL(url).pathname;
+    const marker = "/api/media/";
+    const pathname = new URL(url, window.location.origin).pathname;
     const markerIndex = pathname.indexOf(marker);
     return markerIndex >= 0
       ? decodeURIComponent(pathname.slice(markerIndex + marker.length))
@@ -86,10 +86,10 @@ export default function PostCard({
     setLikeCount((count) => count + (next ? 1 : -1));
 
     startTransition(async () => {
-      const supabase = createClient();
+      const client = createClient();
       const result = next
-        ? await supabase.from("post_likes").insert({ post_id: post.id, user_id: viewer.id })
-        : await supabase.from("post_likes").delete().eq("post_id", post.id).eq("user_id", viewer.id);
+        ? await client.from("post_likes").insert({ post_id: post.id, user_id: viewer.id })
+        : await client.from("post_likes").delete().eq("post_id", post.id).eq("user_id", viewer.id);
 
       if (result.error) {
         setLiked(!next);
@@ -104,10 +104,10 @@ export default function PostCard({
     setBookmarked(next);
 
     startTransition(async () => {
-      const supabase = createClient();
+      const client = createClient();
       const result = next
-        ? await supabase.from("bookmarks").insert({ post_id: post.id, user_id: viewer.id })
-        : await supabase.from("bookmarks").delete().eq("post_id", post.id).eq("user_id", viewer.id);
+        ? await client.from("bookmarks").insert({ post_id: post.id, user_id: viewer.id })
+        : await client.from("bookmarks").delete().eq("post_id", post.id).eq("user_id", viewer.id);
 
       if (result.error) setBookmarked(!next);
     });
@@ -118,12 +118,12 @@ export default function PostCard({
     setMenuOpen(false);
 
     startTransition(async () => {
-      const supabase = createClient();
-      const { error } = await supabase.from("posts").delete().eq("id", post.id);
+      const client = createClient();
+      const { error } = await client.from("posts").delete().eq("id", post.id);
       if (!error) {
         const mediaPath = storagePathFromPublicUrl(post.imageUrl);
         if (mediaPath) {
-          await supabase.storage.from("social-media").remove([mediaPath]);
+          await client.storage.from("social-media").remove([mediaPath]);
         }
         router.refresh();
       }

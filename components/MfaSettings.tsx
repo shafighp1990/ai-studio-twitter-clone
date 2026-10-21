@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { MessageKey } from "@/lib/i18n";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/cloudflare/client";
 import { normalizeTotpCode } from "./MfaChallengeForm";
 import { useI18n } from "./I18nProvider";
 
@@ -44,8 +44,8 @@ export default function MfaSettings() {
     let active = true;
 
     async function loadSettings() {
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.mfa.listFactors();
+      const client = createClient();
+      const { data, error } = await client.auth.mfa.listFactors();
       if (!active) return;
 
       if (error) setErrorKey("mfaSetupError");
@@ -63,8 +63,8 @@ export default function MfaSettings() {
     setErrorKey(null);
     setMessageKey(null);
     setPhase("enrolling");
-    const supabase = createClient();
-    const factors = await supabase.auth.mfa.listFactors();
+    const client = createClient();
+    const factors = await client.auth.mfa.listFactors();
 
     if (factors.error) {
       setErrorKey("mfaSetupError");
@@ -81,7 +81,7 @@ export default function MfaSettings() {
 
     for (const factor of factors.data.all) {
       if (factor.factor_type === "totp" && factor.status === "unverified") {
-        const cleanup = await supabase.auth.mfa.unenroll({ factorId: factor.id });
+        const cleanup = await client.auth.mfa.unenroll({ factorId: factor.id });
         if (cleanup.error) {
           setErrorKey("mfaSetupError");
           setPhase("idle");
@@ -90,7 +90,7 @@ export default function MfaSettings() {
       }
     }
 
-    const { data, error } = await supabase.auth.mfa.enroll({
+    const { data, error } = await client.auth.mfa.enroll({
       factorType: "totp",
       friendlyName: "AI Studio Authenticator",
       issuer: "AI Studio",
@@ -124,8 +124,8 @@ export default function MfaSettings() {
     }
 
     setPhase("verifying");
-    const supabase = createClient();
-    const { error } = await supabase.auth.mfa.challengeAndVerify({
+    const client = createClient();
+    const { error } = await client.auth.mfa.challengeAndVerify({
       factorId: enrollment.id,
       code: setupCode,
     });
@@ -136,7 +136,7 @@ export default function MfaSettings() {
       return;
     }
 
-    const factors = await supabase.auth.mfa.listFactors();
+    const factors = await client.auth.mfa.listFactors();
     setVerifiedFactor(
       factors.data?.totp[0] ?? {
         id: enrollment.id,
@@ -159,8 +159,8 @@ export default function MfaSettings() {
     setSetupCode("");
     setShowSecret(false);
     setErrorKey(null);
-    const supabase = createClient();
-    const { error } = await supabase.auth.mfa.unenroll({ factorId });
+    const client = createClient();
+    const { error } = await client.auth.mfa.unenroll({ factorId });
     if (error) setErrorKey("mfaSetupError");
   }
 
@@ -188,8 +188,8 @@ export default function MfaSettings() {
     if (!window.confirm(t("mfaDisableConfirm"))) return;
 
     setPhase("disabling");
-    const supabase = createClient();
-    const verification = await supabase.auth.mfa.challengeAndVerify({
+    const client = createClient();
+    const verification = await client.auth.mfa.challengeAndVerify({
       factorId: verifiedFactor.id,
       code: disableCode,
     });
@@ -202,14 +202,14 @@ export default function MfaSettings() {
       return;
     }
 
-    const { error } = await supabase.auth.mfa.unenroll({ factorId: verifiedFactor.id });
+    const { error } = await client.auth.mfa.unenroll({ factorId: verifiedFactor.id });
     if (error) {
       setErrorKey("mfaSetupError");
       setPhase("idle");
       return;
     }
 
-    const remainingFactors = await supabase.auth.mfa.listFactors();
+    const remainingFactors = await client.auth.mfa.listFactors();
     if (remainingFactors.error) {
       setErrorKey("mfaSetupError");
       setPhase("idle");
@@ -218,7 +218,7 @@ export default function MfaSettings() {
     }
 
     const nextFactor = remainingFactors.data.totp[0] ?? null;
-    await supabase.auth.refreshSession();
+    await client.auth.refreshSession();
     setVerifiedFactor(nextFactor);
     setDisableCode("");
     setMessageKey(nextFactor ? "mfaFactorRemoved" : "mfaDisabledSuccess");
@@ -270,7 +270,7 @@ export default function MfaSettings() {
               <p className="mt-1 text-sm leading-6 text-[#a5afb5]">{t("mfaScanQr")}</p>
             </div>
             <div className="w-fit rounded-xl bg-white p-3">
-              {/* Supabase returns a data URL containing the trusted enrollment SVG. */}
+              {/* The server generates this enrollment QR code as a PNG data URL. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={enrollment.qrCode} alt={t("mfaQrAlt")} width={224} height={224} />
             </div>

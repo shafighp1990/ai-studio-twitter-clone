@@ -1,6 +1,7 @@
 import type { ExternalPlatform } from "@/lib/external-posts";
 
 export type Profile = {
+  isAdmin?: number;
   id: string;
   username: string;
   name: string;

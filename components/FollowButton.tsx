@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/cloudflare/client";
 import { useI18n } from "./I18nProvider";
 
 export default function FollowButton({
@@ -31,13 +31,13 @@ export default function FollowButton({
     setIsFollowing(nextValue);
 
     startTransition(async () => {
-      const supabase = createClient();
+      const client = createClient();
       const result = nextValue
-        ? await supabase.from("follows").insert({
+        ? await client.from("follows").insert({
             follower_id: viewerId,
             following_id: profileId,
           })
-        : await supabase
+        : await client
             .from("follows")
             .delete()
             .eq("follower_id", viewerId)

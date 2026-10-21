@@ -95,3 +95,12 @@ textarea:focus-visible {
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+.meeting-button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;border:1px solid #52616b;border-radius:8px;padding:10px 16px;font-weight:600;font-size:14px;transition:background .15s;cursor:pointer}
+.meeting-button:hover{background:#22333e}.meeting-button:disabled{opacity:.45;cursor:wait}.meeting-button.primary{background:#72a7c7;color:#071015;border-color:#72a7c7}.meeting-button.primary:hover{background:#9bc8e3}.meeting-button.danger{color:#ffabb5;border-color:#793c48}.meeting-button:focus-visible{outline:2px solid #b1deef;outline-offset:3px}
+
+.admin-button { display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border:1px solid #36515f;border-radius:.7rem;padding:.6rem .9rem;font-size:.82rem;line-height:1.4;background:#142733;color:#d2e7f2;white-space:nowrap;transition:background .15s;cursor:pointer; }
+.admin-button:hover { background:#203d4e; }
+.admin-button:focus-visible { outline:2px solid #a7d9f2;outline-offset:3px; }
+.admin-button:disabled { opacity:.4;cursor:not-allowed; }
+.admin-button.danger { color:#ffc3c8;border-color:#794954;background:#351e28; }

@@ -1,34 +1,20 @@
 import "server-only";
-
-import { createClient } from "@/lib/supabase/server";
+import { all, one } from "@/lib/cloudflare/db";
+import { session } from "@/lib/cloudflare/auth";
 import type {
   FeedPost,
   NotificationItem,
   Profile,
   ProfileSummary,
 } from "@/lib/types";
-
-const PROFILE_COLUMNS =
-  "id, username, name, bio, location, website, avatar_url, banner_url, verified, created_at, updated_at";
-
-const POST_SELECT = `
-  id,
-  content,
-  image_url,
-  external_platform,
-  external_url,
-  reply_to_id,
-  created_at,
-  author:profiles!posts_author_id_fkey(${PROFILE_COLUMNS}),
-  post_likes(user_id),
-  reposts(user_id)
-`;
-
-function postSelect(includeViewerBookmarks: boolean) {
-  return `${POST_SELECT}${includeViewerBookmarks ? ", bookmarks(user_id)" : ""}`;
+const authorJson = `json_object('id',p.id,'username',p.username,'name',p.name,'bio',p.bio,'location',p.location,'website',p.website,'avatar_url',p.avatar_url,'banner_url',p.banner_url,'verified',p.verified,'created_at',p.created_at,'updated_at',p.updated_at)`;
+export async function getViewer() {
+  const s = await session();
+  return s
+    ? one<Profile>("SELECT p.*,u.is_admin AS isAdmin FROM profiles p JOIN users u ON u.id=p.id WHERE p.id=?", s.user_id)
+    : null;
 }
-
-type RawPost = {
+type PostRow = {
   id: string;
   content: string;
   image_url: string | null;
@@ -36,61 +22,45 @@ type RawPost = {
   external_url: string | null;
   reply_to_id: string | null;
   created_at: string;
-  author: Profile | Profile[];
-  post_likes: { user_id: string }[] | null;
-  reposts: { user_id: string }[] | null;
-  bookmarks: { user_id: string }[] | null;
+  author_json: string;
+  likeCount: number;
+  repostCount: number;
+  replyCount: number;
+  likedByViewer: number;
+  repostedByViewer: number;
+  bookmarkedByViewer: number;
 };
-
-function firstProfile(profile: Profile | Profile[]) {
-  return Array.isArray(profile) ? profile[0] : profile;
+async function posts(where: string, args: (string | number)[], limit = 50) {
+  const s = await session();
+  const id = s?.user_id ?? "";
+  const rows = await all<PostRow>(
+    `SELECT t.*,${authorJson} AS author_json,(SELECT COUNT(*) FROM post_likes l WHERE l.post_id=t.id) AS likeCount,(SELECT COUNT(*) FROM reposts r WHERE r.post_id=t.id) AS repostCount,(SELECT COUNT(*) FROM posts r WHERE r.reply_to_id=t.id) AS replyCount,EXISTS(SELECT 1 FROM post_likes l WHERE l.post_id=t.id AND l.user_id=?) AS likedByViewer,EXISTS(SELECT 1 FROM reposts r WHERE r.post_id=t.id AND r.user_id=?) AS repostedByViewer,EXISTS(SELECT 1 FROM bookmarks b WHERE b.post_id=t.id AND b.user_id=?) AS bookmarkedByViewer FROM posts t JOIN profiles p ON p.id=t.author_id WHERE ${where} ORDER BY t.created_at DESC LIMIT ?`,
+    id,
+    id,
+    id,
+    ...args,
+    Math.min(100, Math.max(1, limit)),
+  );
+  return rows.map(
+    (r) =>
+      ({
+        id: r.id,
+        content: r.content,
+        imageUrl: r.image_url,
+        externalPlatform: r.external_platform,
+        externalUrl: r.external_url,
+        replyToId: r.reply_to_id,
+        createdAt: r.created_at,
+        author: JSON.parse(r.author_json),
+        likeCount: r.likeCount,
+        repostCount: r.repostCount,
+        replyCount: r.replyCount,
+        likedByViewer: !!r.likedByViewer,
+        repostedByViewer: !!r.repostedByViewer,
+        bookmarkedByViewer: !!r.bookmarkedByViewer,
+      }) satisfies FeedPost,
+  );
 }
-
-function toFeedPost(post: RawPost, viewerId?: string, replyCount = 0): FeedPost {
-  const likes = post.post_likes ?? [];
-  const reposts = post.reposts ?? [];
-  const bookmarks = post.bookmarks ?? [];
-
-  return {
-    id: post.id,
-    content: post.content,
-    imageUrl: post.image_url,
-    externalPlatform: post.external_platform,
-    externalUrl: post.external_url,
-    replyToId: post.reply_to_id,
-    createdAt: post.created_at,
-    author: firstProfile(post.author),
-    likeCount: likes.length,
-    repostCount: reposts.length,
-    replyCount,
-    likedByViewer: Boolean(viewerId && likes.some((like) => like.user_id === viewerId)),
-    repostedByViewer: Boolean(
-      viewerId && reposts.some((repost) => repost.user_id === viewerId),
-    ),
-    bookmarkedByViewer: Boolean(
-      viewerId && bookmarks.some((bookmark) => bookmark.user_id === viewerId),
-    ),
-  };
-}
-
-export async function getViewer() {
-  const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const userId = claimsData?.claims?.sub;
-
-  if (!userId) {
-    return null;
-  }
-
-  const { data } = await supabase
-    .from("profiles")
-    .select(PROFILE_COLUMNS)
-    .eq("id", userId)
-    .maybeSingle();
-
-  return data as Profile | null;
-}
-
 export async function getPosts(options?: {
   authorId?: string;
   search?: string;
@@ -99,290 +69,100 @@ export async function getPosts(options?: {
   includeReplies?: boolean;
   limit?: number;
 }) {
-  const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const viewerId = claimsData?.claims?.sub;
-  let postIds: string[] | null = null;
-
-  if (options?.bookmarkedBy) {
-    if (!viewerId || options.bookmarkedBy !== viewerId) {
-      return [];
-    }
-
-    const { data: bookmarkRows } = await supabase
-      .from("bookmarks")
-      .select("post_id")
-      .eq("user_id", options.bookmarkedBy)
-      .order("created_at", { ascending: false });
-    postIds = bookmarkRows?.map((bookmark) => bookmark.post_id) ?? [];
-
-    if (postIds.length === 0) {
-      return [];
-    }
-  }
-
-  let query = supabase
-    .from("posts")
-    .select(postSelect(Boolean(viewerId)))
-    .order("created_at", { ascending: false })
-    .limit(options?.limit ?? 50);
-
+  const where = ["1=1"],
+    args: string[] = [];
   if (options?.authorId) {
-    query = query.eq("author_id", options.authorId);
+    where.push("t.author_id=?");
+    args.push(options.authorId);
   }
-
   if (options?.search?.trim()) {
-    const safeSearch = options.search.trim().replace(/[%_,]/g, "");
-    query = query.ilike("content", `%${safeSearch}%`);
+    where.push("instr(lower(t.content),lower(?))>0");
+    args.push(options.search.trim());
   }
-
   if (options?.replyToId) {
-    query = query.eq("reply_to_id", options.replyToId);
-  } else if (!options?.includeReplies) {
-    query = query.is("reply_to_id", null);
+    where.push("t.reply_to_id=?");
+    args.push(options.replyToId);
+  } else if (!options?.includeReplies) where.push("t.reply_to_id IS NULL");
+  if (options?.bookmarkedBy) {
+    const s = await session();
+    if (s?.user_id !== options.bookmarkedBy) return [];
+    where.push(
+      "EXISTS(SELECT 1 FROM bookmarks b WHERE b.post_id=t.id AND b.user_id=?)",
+    );
+    args.push(s.user_id);
   }
-
-  if (postIds) {
-    query = query.in("id", postIds);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error("Unable to load posts:", error.message);
-    return [];
-  }
-
-  const rawPosts = data as unknown as RawPost[];
-  const postIdsForReplies = rawPosts.map((post) => post.id);
-  const replyCounts = new Map<string, number>();
-
-  if (postIdsForReplies.length > 0) {
-    const { data: replyRows } = await supabase
-      .from("posts")
-      .select("reply_to_id")
-      .in("reply_to_id", postIdsForReplies);
-
-    for (const reply of replyRows ?? []) {
-      if (reply.reply_to_id) {
-        replyCounts.set(
-          reply.reply_to_id,
-          (replyCounts.get(reply.reply_to_id) ?? 0) + 1,
-        );
-      }
-    }
-  }
-
-  return rawPosts.map((post) =>
-    toFeedPost(post, viewerId, replyCounts.get(post.id) ?? 0),
+  return posts(where.join(" AND "), args, options?.limit);
+}
+export async function getPostById(id: string) {
+  return (await posts("t.id=?", [id], 1))[0] ?? null;
+}
+async function profiles(where: string, args: (string | number)[], limit = 50) {
+  const s = await session();
+  const rows = await all<ProfileSummary>(
+    `SELECT p.*,(SELECT COUNT(*) FROM follows f WHERE f.following_id=p.id) AS followerCount,(SELECT COUNT(*) FROM follows f WHERE f.follower_id=p.id) AS followingCount,EXISTS(SELECT 1 FROM follows f WHERE f.following_id=p.id AND f.follower_id=?) AS followedByViewer FROM profiles p WHERE ${where} ORDER BY p.created_at LIMIT ?`,
+    s?.user_id ?? "",
+    ...args,
+    limit,
+  );
+  return rows.map((r) => ({
+    ...r,
+    verified: !!r.verified,
+    followedByViewer: !!r.followedByViewer,
+  }));
+}
+export async function getProfile(username: string) {
+  return (
+    (await profiles("p.username=?", [username.toLowerCase()], 1))[0] ?? null
   );
 }
-
-export async function getPostById(postId: string) {
-  const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const viewerId = claimsData?.claims?.sub;
-  const { data, error } = await supabase
-    .from("posts")
-    .select(postSelect(Boolean(viewerId)))
-    .eq("id", postId)
-    .maybeSingle();
-
-  if (error || !data) {
-    return null;
-  }
-
-  const { count: replyCount } = await supabase
-    .from("posts")
-    .select("id", { count: "exact", head: true })
-    .eq("reply_to_id", postId);
-
-  return toFeedPost(data as unknown as RawPost, viewerId, replyCount ?? 0);
-}
-
-export async function getProfile(username: string) {
-  const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const viewerId = claimsData?.claims?.sub;
-  const { data } = await supabase
-    .from("profiles")
-    .select(
-      `${PROFILE_COLUMNS}, followers:follows!follows_following_id_fkey(follower_id), following:follows!follows_follower_id_fkey(following_id)`,
-    )
-    .eq("username", username.toLowerCase())
-    .maybeSingle();
-
-  if (!data) {
-    return null;
-  }
-
-  const profile = data as unknown as Profile & {
-    followers: { follower_id: string }[];
-    following: { following_id: string }[];
-  };
-
-  return {
-    ...profile,
-    followerCount: profile.followers?.length ?? 0,
-    followingCount: profile.following?.length ?? 0,
-    followedByViewer: Boolean(
-      viewerId &&
-        profile.followers?.some((follow) => follow.follower_id === viewerId),
-    ),
-  } satisfies ProfileSummary;
-}
-
 export async function getSuggestedProfiles(limit = 3) {
-  const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const viewerId = claimsData?.claims?.sub;
-  let query = supabase
-    .from("profiles")
-    .select(
-      `${PROFILE_COLUMNS}, followers:follows!follows_following_id_fkey(follower_id), following:follows!follows_follower_id_fkey(following_id)`,
-    )
-    .order("created_at", { ascending: true })
-    .limit(limit);
-
-  if (viewerId) {
-    query = query.neq("id", viewerId);
-  }
-
-  const { data } = await query;
-
-  return ((data ?? []) as unknown as Array<
-    Profile & {
-      followers: { follower_id: string }[];
-      following: { following_id: string }[];
-    }
-  >).map((profile) => ({
-    ...profile,
-    followerCount: profile.followers?.length ?? 0,
-    followingCount: profile.following?.length ?? 0,
-    followedByViewer: Boolean(
-      viewerId &&
-        profile.followers?.some((follow) => follow.follower_id === viewerId),
-    ),
-  }));
+  const s = await session();
+  return profiles("p.id<>?", [s?.user_id ?? ""], limit);
 }
-
 export async function searchProfiles(search: string, limit = 20) {
-  const queryText = search.trim().replace(/[%_,]/g, "");
-
-  if (!queryText) return [];
-
-  const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const viewerId = claimsData?.claims?.sub;
-  const { data } = await supabase
-    .from("profiles")
-    .select(
-      `${PROFILE_COLUMNS}, followers:follows!follows_following_id_fkey(follower_id), following:follows!follows_follower_id_fkey(following_id)`,
-    )
-    .or(`name.ilike.%${queryText}%,username.ilike.%${queryText}%`)
-    .limit(limit);
-
-  return ((data ?? []) as unknown as Array<
-    Profile & {
-      followers: { follower_id: string }[];
-      following: { following_id: string }[];
-    }
-  >).map((profile) => ({
-    ...profile,
-    followerCount: profile.followers?.length ?? 0,
-    followingCount: profile.following?.length ?? 0,
-    followedByViewer: Boolean(
-      viewerId && profile.followers?.some((follow) => follow.follower_id === viewerId),
-    ),
-  }));
+  if (!search.trim()) return [];
+  return profiles(
+    "(instr(lower(p.name),lower(?))>0 OR instr(p.username,lower(?))>0)",
+    [search.trim(), search.trim()],
+    limit,
+  );
 }
-
 export async function getFollowProfiles(
-  profileId: string,
+  id: string,
   kind: "followers" | "following",
 ) {
-  const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const viewerId = claimsData?.claims?.sub;
-  let ids: string[];
-
-  if (kind === "followers") {
-    const { data: follows } = await supabase
-      .from("follows")
-      .select("follower_id")
-      .eq("following_id", profileId)
-      .order("created_at", { ascending: false });
-    ids = (follows ?? []).map((row) => row.follower_id);
-  } else {
-    const { data: follows } = await supabase
-      .from("follows")
-      .select("following_id")
-      .eq("follower_id", profileId)
-      .order("created_at", { ascending: false });
-    ids = (follows ?? []).map((row) => row.following_id);
-  }
-
-  if (ids.length === 0) return [];
-
-  const { data } = await supabase
-    .from("profiles")
-    .select(
-      `${PROFILE_COLUMNS}, followers:follows!follows_following_id_fkey(follower_id), following:follows!follows_follower_id_fkey(following_id)`,
-    )
-    .in("id", ids);
-
-  return ((data ?? []) as unknown as Array<
-    Profile & {
-      followers: { follower_id: string }[];
-      following: { following_id: string }[];
-    }
-  >).map((profile) => ({
-    ...profile,
-    followerCount: profile.followers?.length ?? 0,
-    followingCount: profile.following?.length ?? 0,
-    followedByViewer: Boolean(
-      viewerId && profile.followers?.some((follow) => follow.follower_id === viewerId),
-    ),
-  }));
+  return profiles(
+    kind === "followers"
+      ? "EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=p.id AND f.following_id=?)"
+      : "EXISTS(SELECT 1 FROM follows f WHERE f.following_id=p.id AND f.follower_id=?)",
+    [id],
+    100,
+  );
 }
-
 export async function getNotifications() {
-  const viewer = await getViewer();
-
-  if (!viewer) {
-    return [];
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("notifications")
-    .select(
-      `id, type, read, created_at, actor:profiles!notifications_actor_id_fkey(${PROFILE_COLUMNS}), post:posts!notifications_post_id_fkey(id, content)`,
-    )
-    .eq("recipient_id", viewer.id)
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  if (error) {
-    console.error("Unable to load notifications:", error.message);
-    return [];
-  }
-
-  return (data as unknown as Array<{
+  const s = await session();
+  if (!s) return [];
+  const rows = await all<{
     id: string;
     type: NotificationItem["type"];
-    read: boolean;
+    read: number;
     created_at: string;
-    actor: Profile | Profile[];
-    post: { id: string; content: string } | { id: string; content: string }[] | null;
-  }>).map((notification) => ({
-    id: notification.id,
-    type: notification.type,
-    read: notification.read,
-    createdAt: notification.created_at,
-    actor: firstProfile(notification.actor),
-    post: Array.isArray(notification.post)
-      ? notification.post[0] ?? null
-      : notification.post,
-  }));
+    actor_json: string;
+    post_id: string | null;
+    content: string | null;
+  }>(
+    `SELECT n.*,${authorJson} AS actor_json,t.content FROM notifications n JOIN profiles p ON p.id=n.actor_id LEFT JOIN posts t ON t.id=n.post_id WHERE n.recipient_id=? ORDER BY n.created_at DESC LIMIT 50`,
+    s.user_id,
+  );
+  return rows.map(
+    (r) =>
+      ({
+        id: r.id,
+        type: r.type,
+        read: !!r.read,
+        createdAt: r.created_at,
+        actor: JSON.parse(r.actor_json),
+        post: r.post_id ? { id: r.post_id, content: r.content ?? "" } : null,
+      }) satisfies NotificationItem,
+  );
 }

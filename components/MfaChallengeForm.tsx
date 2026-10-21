@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { MessageKey } from "@/lib/i18n";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/cloudflare/client";
 import { useI18n } from "./I18nProvider";
 
 type TotpFactor = {
@@ -45,8 +45,8 @@ export default function MfaChallengeForm() {
     let active = true;
 
     async function loadFactors() {
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.mfa.listFactors();
+      const client = createClient();
+      const { data, error } = await client.auth.mfa.listFactors();
       if (!active) return;
 
       if (error) {
@@ -75,8 +75,8 @@ export default function MfaChallengeForm() {
     }
 
     setIsSubmitting(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
+    const client = createClient();
+    const { error } = await client.auth.mfa.challengeAndVerify({ factorId, code });
 
     if (error) {
       setErrorKey(verificationErrorKey(error.code));
@@ -89,8 +89,8 @@ export default function MfaChallengeForm() {
   }
 
   async function handleSignOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut({ scope: "local" });
+    const client = createClient();
+    await client.auth.signOut({ scope: "local" });
     router.replace("/login");
     router.refresh();
   }

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { MessageKey } from "@/lib/i18n";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/cloudflare/client";
 import { useI18n } from "./I18nProvider";
 
 function authErrorKey(message: string): MessageKey {
@@ -55,10 +55,10 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
     }
 
     startTransition(async () => {
-      const supabase = createClient();
+      const client = createClient();
 
       if (mode === "login") {
-        const { error: loginError } = await supabase.auth.signInWithPassword({
+        const { error: loginError } = await client.auth.signInWithPassword({
           email: email.trim().toLowerCase(),
           password,
         });
@@ -69,7 +69,7 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
         }
 
         const { data: assurance, error: assuranceError } =
-          await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+          await client.auth.mfa.getAuthenticatorAssuranceLevel();
 
         if (assuranceError) {
           setErrorKey("authGenericError");
@@ -79,13 +79,13 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
         router.replace(
           assurance.currentLevel !== "aal2" && assurance.nextLevel === "aal2"
             ? "/auth/mfa"
-            : "/",
+            : assurance.mustChangePassword ? "/auth/change-password" : assurance.isAdmin ? "/admin" : "/",
         );
         router.refresh();
         return;
       }
 
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      const { data, error: signUpError } = await client.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
         options: {

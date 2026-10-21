@@ -1,99 +1,66 @@
-# AI Studio — Twitter Clone
+# Arrisches Communication
 
-A portfolio-grade social network inspired by the interaction model and responsive layout of X/Twitter. The application is built with Next.js, TypeScript, Tailwind CSS, and Supabase.
+Social network and guest video meetings, hosted entirely on Cloudflare at https://ai-studio-twitter-clone.aistudiotest.workers.dev.
 
-## Features
+## Runtime
 
-- Responsive three-column desktop layout and mobile bottom navigation
-- Secure email/password authentication with Supabase Auth and SSR cookies
-- Public home timeline with 280-character posts
-- Quote and discuss public posts from X, Instagram, and Facebook without copying their media
-- Provider-labelled source cards with permanent original links and official X actions
-- Share AI Studio posts to X, Facebook, Instagram-capable device apps, or the clipboard
-- Post-specific Open Graph and X card metadata for inbound social traffic
-- Image uploads through Supabase Storage
-- Post detail pages and threaded replies
-- Optimistic likes, bookmarks, and follows
-- Public profiles with avatar, banner, bio, location, and website editing
-- Followers and following lists
-- Explore search across people and posts
-- German-first interface with Persian, Ukrainian, and Arabic translations
-- Native right-to-left layout for Persian and Arabic
-- Private bookmarks and account notifications
-- Database-generated notifications for likes, replies, and follows
-- Dark X/Twitter-inspired UI with the custom AI Studio identity and a Fira Sans / Noto Sans Arabic type system
+- Next.js / OpenNext on Workers; D1 for accounts, sessions, social data and meeting signaling.
+- R2 for profile and post images.
+- Browser WebRTC for encrypted audio/video, with Cloudflare TURN fallback on restricted networks.
+- No Supabase SDK, runtime requests, authentication or storage dependencies. Historical SQL under `supabase/migrations` is retained only as an archive.
 
-## Stack
+Existing account password hashes are migrated unchanged. Users sign in again with their existing passwords. New registrations use bcrypt, opaque HttpOnly sessions and optional encrypted TOTP authentication. Signup currently does not send verification emails or self-service reset emails; administrators can issue temporary passwords from the admin panel. No email delivery provider is configured. The application does not advertise an email as verified merely because an account exists.
 
-- Next.js 16 App Router
-- React 19 and TypeScript
-- Tailwind CSS 4
-- Supabase Auth, Postgres, Storage, and Row Level Security
-- Cloudflare Workers with the OpenNext adapter
-- ESLint and npm security auditing
+## Meetings
 
-## Local setup
+Signed-in users create rooms at `/meetings`. The guest opens the invitation, enters a name and joins without registering. Invitations contain a random secret in the URL fragment, expire after 24 hours and can be replaced by the host. Guest sessions and TURN credentials last eight hours; there is no one-hour cutoff. Hosts can end the room for everyone. Maximum six participants; one-to-one calls are the primary use case. Larger rooms use a full mesh and require more bandwidth. Camera/microphone toggles, audio-only entry, listening and screen sharing are supported. The server does not record media. Keep the browser tab open while calling.
 
-1. Install dependencies:
+At 2 Mbit/s video per person, a fully relayed two-person one-hour call uses approximately 1.8 GB outgoing video, roughly 2–2.2 GB including audio and transport overhead. Direct connections do not consume Cloudflare video egress. For N participants in a full mesh, approximate relayed GB/hour is `0.45 × N × (N−1) × bitrate_Mbit/s`, plus overhead. Actual usage depends on negotiated bitrate, screen sharing and connection routes. Cloudflare Realtime's first 1,000 GB/month is shared by TURN and SFU; separate Workers/D1/R2 quotas apply.
 
-   ```bash
-   npm install
-   ```
+## Administration
 
-2. Copy `.env.example` to `.env.local` and add the project values from the Supabase Connect dialog:
+The Persian RTL dashboard at `/admin` is available only to designated administrators. It shows paginated/searchable accounts, posts, media, rooms, allowlisted database records and an audit log. Administrators can delete posts (including dependent replies), remove images, end rooms, suspend/restore accounts, revoke sessions and issue temporary passwords. Image removal blocks the old URL immediately and clears matching post/profile references before deleting the R2 object.
 
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
-   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key
-   NEXT_PUBLIC_SITE_URL=http://localhost:3000
-   ```
+Passwords, session/invitation tokens, MFA secrets and private WebRTC payloads are never exposed in database views. Password resets generate a new temporary password displayed only once. The account must change it before using protected features; enabled MFA still applies. Resetting/suspending an account revokes its sessions and ends its hosted rooms. Password changes invalidate prior sessions using an account authentication version. An administrator cannot suspend their own account or another administrator through this panel. Own password changes are at `/auth/change-password`.
 
-3. Apply the SQL files in `supabase/migrations` to a Supabase project.
+Apply `0003_admin.sql` before deploying this version. Grant the administrator role out of band to a verified owner account; registration and profile updates cannot assign roles. Never put initial admin credentials in source control. The initial owner password is handed over privately and must be changed on first login.
 
-4. Start the application:
+## Development
 
-   ```bash
-   npm run dev
-   ```
+```sh
+npm ci
+npm run cf-typegen
+npx wrangler d1 migrations apply DB --local
+npm run dev
+```
 
-5. Open [http://localhost:3000](http://localhost:3000).
+Open `http://localhost:3000`. Put server-only `TURN_KEY_ID`, `TURN_KEY_TOKEN` and `AUTH_ENCRYPTION_KEY` in ignored `.dev.vars`; the auth key is 32 random bytes encoded as base64. Never expose these as `NEXT_PUBLIC_*` variables. Local D1/R2 data are isolated from production. Production resource bindings are in `wrangler.jsonc`.
 
-## Cloudflare deployment
+## Deployment
 
-The repository includes the production configuration for Cloudflare Workers:
-
-```bash
-npm run build:cloudflare
-npm run preview
+```sh
+npx wrangler d1 migrations apply DB --remote
+npx wrangler secret put TURN_KEY_ID
+npx wrangler secret put TURN_KEY_TOKEN
+npx wrangler secret put AUTH_ENCRYPTION_KEY
 npm run deploy
 ```
 
-For Cloudflare Workers Builds, use `npm run build:cloudflare` as the build command and `npx wrangler deploy --keep-vars` as the deploy command. Configure both Supabase values as build secrets and runtime secrets:
+Preserve `AUTH_ENCRYPTION_KEY` across deployments so enrolled authenticators remain usable. Production secrets are maintained in Workers secret storage. Do not include private exports or test credentials in Git. Back up D1 before schema/data changes; D1 Time Travel is available for recovery according to the account plan.
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
-NEXT_PUBLIC_SITE_URL=https://your-worker.example.workers.dev
-```
+## Validation
 
-## Quality checks
-
-```bash
+```sh
 npm run lint
-npm run build
-npm audit
+npx tsc --noEmit
+npm run build:cloudflare
+npm audit --omit=dev
+node tests/integration.mjs
+node tests/admin.mjs
 ```
 
-## Security
+The integration test defaults to localhost and creates synthetic accounts. It verifies authentication, CSRF, guest invitations, invalidation, signaling authorization, room ownership, social ownership and TOTP replay prevention. Use a disposable local database. For deliberate deployment verification, set `TEST_URL` and `TEST_CLEANUP_FILE`; remove only the listed synthetic rows after the run. The audit's remaining `braces` advisory is confined to the development lint toolchain; production dependency audit is clean at migration time.
 
-All exposed tables have Row Level Security enabled. Public timelines can only read public social data. Creating or modifying posts, likes, follows, bookmarks, notifications, and media requires an authenticated user, with ownership verified in the database policies. External-source URLs are restricted to canonical HTTPS post links from X, Instagram, or Facebook; AI Studio never copies their captions or media and does not execute provider scripts inside the application. The browser receives only the Supabase publishable key; no service-role key is used by the application.
+The app preserves posts, replies, reactions, follows, bookmarks, notifications, multilingual layouts (German, Persian, Ukrainian, Arabic), external source cards, profile editing and image uploads. API handlers enforce identity and ownership; clients cannot choose an acting user ID. Uploads are restricted to raster images under the owner's path. TOTP secrets are encrypted with AES-GCM; reused codes are rejected.
 
-## Main routes
-
-- `/` — home timeline
-- `/explore` — people and post search
-- `/notifications` — account activity
-- `/bookmarks` — private saved posts
-- `/post/[id]` — post detail and replies
-- `/[username]` — public profile
-- `/login` and `/register` — authentication
+The admin suite is strictly localhost-only, refuses remote target variables, creates disposable accounts and removes their exact records afterward. It checks privilege boundaries, all database views, image/post moderation, room closure, password reset and forced change, session revocation, suspension and audit redaction.

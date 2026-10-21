@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { useI18n } from "@/components/I18nProvider";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/cloudflare/client";
 import type { NotificationItem } from "@/lib/types";
 import Avatar from "./Avatar";
 import VerifiedBadge from "./VerifiedBadge";
@@ -29,8 +29,8 @@ export default function NotificationsList({ items, viewerId }: { items: Notifica
   useEffect(() => {
     const unreadIds = items.filter((item) => !item.read).map((item) => item.id);
     if (unreadIds.length === 0) return;
-    const supabase = createClient();
-    void supabase.from("notifications").update({ read: true }).eq("recipient_id", viewerId).in("id", unreadIds);
+    const client = createClient();
+    void client.from("notifications").update({ read: true }).eq("recipient_id", viewerId).in("id", unreadIds);
   }, [items, viewerId]);
 
   if (items.length === 0) {

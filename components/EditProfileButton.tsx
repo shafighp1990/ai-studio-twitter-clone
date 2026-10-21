@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/cloudflare/client";
 import type { Profile } from "@/lib/types";
 import Avatar from "./Avatar";
 import { useI18n } from "./I18nProvider";
@@ -11,8 +11,8 @@ import { CloseIcon, ImageIcon } from "./icons";
 function storagePathFromPublicUrl(url: string | null) {
   if (!url) return null;
   try {
-    const marker = "/storage/v1/object/public/social-media/";
-    const pathname = new URL(url).pathname;
+    const marker = "/api/media/";
+    const pathname = new URL(url, window.location.origin).pathname;
     const markerIndex = pathname.indexOf(marker);
     return markerIndex >= 0
       ? decodeURIComponent(pathname.slice(markerIndex + marker.length))
@@ -119,17 +119,17 @@ export default function EditProfileButton({ profile }: { profile: Profile }) {
   }
 
   async function uploadImage(file: File, kind: "avatars" | "banners") {
-    const supabase = createClient();
+    const client = createClient();
     const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
     const path = `${profile.id}/${kind}/${crypto.randomUUID()}.${extension}`;
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await client.storage
       .from("social-media")
       .upload(path, file, { cacheControl: "3600", upsert: false });
 
     if (uploadError) throw uploadError;
     return {
       path,
-      url: supabase.storage.from("social-media").getPublicUrl(path).data.publicUrl,
+      url: client.storage.from("social-media").getPublicUrl(path).data.publicUrl,
     };
   }
 
@@ -138,7 +138,7 @@ export default function EditProfileButton({ profile }: { profile: Profile }) {
     setError("");
 
     startTransition(async () => {
-      const supabase = createClient();
+      const client = createClient();
       const uploadedPaths: string[] = [];
       try {
         let avatarUrl = profile.avatar_url;
@@ -155,7 +155,7 @@ export default function EditProfileButton({ profile }: { profile: Profile }) {
           uploadedPaths.push(upload.path);
         }
 
-        const { error: updateError } = await supabase
+        const { error: updateError } = await client
           .from("profiles")
           .update({
             name: name.trim(),
@@ -174,7 +174,7 @@ export default function EditProfileButton({ profile }: { profile: Profile }) {
           bannerFile ? storagePathFromPublicUrl(profile.banner_url) : null,
         ].filter((path): path is string => Boolean(path));
         if (stalePaths.length > 0) {
-          await supabase.storage.from("social-media").remove(stalePaths);
+          await client.storage.from("social-media").remove(stalePaths);
         }
 
         releaseObjectPreviews();
@@ -187,7 +187,7 @@ export default function EditProfileButton({ profile }: { profile: Profile }) {
         router.refresh();
       } catch {
         if (uploadedPaths.length > 0) {
-          await supabase.storage.from("social-media").remove(uploadedPaths);
+          await client.storage.from("social-media").remove(uploadedPaths);
         }
         setError(t("profileUpdateError"));
       }
